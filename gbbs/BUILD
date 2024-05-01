@@ -206,6 +206,15 @@ cc_library(
 )
 
 cc_library(
+    name = "dynamic_graph_io",
+    hdrs = ["dynamic_graph_io.h"],
+    deps = [
+        ":gbbs",
+        ":graph_io"
+    ],
+)
+
+cc_library(
     name = "io",
     srcs = ["io.cc"],
     hdrs = ["io.h"],
