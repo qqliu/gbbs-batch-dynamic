@@ -1,5 +1,6 @@
 // Usage (dynamic):
-// numactl -i all ./LDS -rounds 3 -s -eps 0.4 -delta 3 -i <dynamic graph> -b 1000 <static graph>
+// numactl -i all ./SkipList -s -rounds 3 empty_h
+// bazel run //benchmarks/BatchDynamicConnectivity/SkipList:SkipList_main -- -s -rounds 1 -s ~/gbbs-batch-dynamic/benchmarks/BatchDynamicConnectivity/SkipList/empty_h
 // flags:
 //   required:
 //     -s : indicates that the graph is symmetric
@@ -19,7 +20,7 @@
 
 namespace gbbs {
 template <class Graph>
-double LDS_runner(Graph& G, commandLine P) {
+double SkipList_runner(Graph& G, commandLine P) {
   std::cout << "### Application: LDS" << std::endl;
   std::cout << "### Graph: " << P.getArgument(0) << std::endl;
   std::cout << "### Threads: " << num_workers() << std::endl;
@@ -41,4 +42,4 @@ double LDS_runner(Graph& G, commandLine P) {
 }
 }  // namespace gbbs
 
-generate_symmetric_main(gbbs::LDS_runner, false);
+generate_symmetric_main(gbbs::SkipList_runner, false);
