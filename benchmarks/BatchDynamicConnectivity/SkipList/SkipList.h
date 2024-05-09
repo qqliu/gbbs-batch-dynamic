@@ -422,6 +422,8 @@ struct SkipList {
             return results;
     }
 
+    // TODO: get size function using the new size attribute
+
     sequence<sequence<std::pair<uintE, uintE>>> get_subsequence_sum(SkipListElement* left, SkipListElement* right) {
             size_t level = 0;
             sequence<sequence<std::pair<uintE, uintE>>> xor_sums = right->values[level];
