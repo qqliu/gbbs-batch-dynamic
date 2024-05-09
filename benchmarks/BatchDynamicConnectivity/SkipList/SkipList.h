@@ -120,9 +120,8 @@ struct SkipList {
         }
 
         auto height = std::min(cur_height, (size_t) 32);
-        //std::cout << "initializing node" << std::endl;
 
-        auto node = SkipListElement(height, left, right, vals, twin, is_vertex, id);
+        auto node = SkipListElement(height, left, right, vals, twin, is_vertex, id, pb, num_dup, m);
         return node;
     }
 
