@@ -14,6 +14,7 @@ struct SkipList {
     struct SkipListElement {
         size_t height;
         size_t lowest_needs_update = 0;
+        size_t size = 1;
 
         using pointers = std::pair<SkipListElement*, SkipListElement*>;
         using height_array = sequence<pointers>;
@@ -29,7 +30,7 @@ struct SkipList {
         double probability_base;
         int num_duplicates;
 
-        SkipListElement(): height(0), lowest_needs_update(0) { update_level = UINT_E_MAX; split_mark = false;
+        SkipListElement(): height(0), lowest_needs_update(0), size(1) { update_level = UINT_E_MAX; split_mark = false;
             twin = nullptr;
             is_vertex = false;
             id = std::make_pair(UINT_E_MAX, UINT_E_MAX);
@@ -40,7 +41,7 @@ struct SkipList {
         SkipListElement(size_t _h, SkipListElement* _r, SkipListElement* _l,
                 sequence<sequence<std::pair<uintE, uintE>>> _vals,
                 SkipListElement* twin_ = nullptr, bool is_vertex_ = false, std::pair<uintE, uintE>id_ =
-                std::make_pair(UINT_E_MAX, UINT_E_MAX), double pb = 2, int num_dup = 2, size_t m = 10):
+                std::make_pair(UINT_E_MAX, UINT_E_MAX), double pb = 2, int num_dup = 2, size_t m = 10, uintE size_ = 1):
             height(_h), lowest_needs_update(_h) {
                 elements.resize(_h);
                 update_level = UINT_E_MAX;
@@ -54,6 +55,7 @@ struct SkipList {
                 id = id_;
                 probability_base = pb;
                 num_duplicates = num_dup;
+                size = size_;
 
                 parallel_for(1, _h, [&](size_t i){
                     values[i] = sequence<sequence<std::pair<uintE, uintE>>>(num_duplicates,
