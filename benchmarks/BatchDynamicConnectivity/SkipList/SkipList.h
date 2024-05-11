@@ -81,12 +81,6 @@ struct SkipList {
                return gbbs::atomic_compare_and_swap(&neighbors[level].second, old_right, new_right);
         }
 
-        /*inline bool CASvalue(std::pair<uintE, uintE> old_value, std::pair<uintE, uintE> new_value) {
-               return gbbs::atomic_compare_and_swap(&values[0], old_value, new_value);
-               values[0] = new_value;
-               return true;
-        }*/
-
         inline SkipListElement* get_left(size_t height) {
                 return neighbors[height].first;
         }
@@ -157,7 +151,6 @@ struct SkipList {
     }
 
     SkipListElement* find_representative(SkipListElement* this_element) {
-        ///std::cout << "started find representative" << std::endl;
         SkipListElement* cur_element = this_element;
         SkipListElement* seen_element = nullptr;
 
@@ -165,17 +158,10 @@ struct SkipList {
 
         while(cur_element->neighbors[current_level].second != nullptr &&
                 seen_element != cur_element) {
-                //std::cout << "started while" << std::endl;
                 if (seen_element == nullptr || cur_element < seen_element)
                     seen_element = cur_element;
-                /*std::cout << "start middle while" << std::endl;
-                if (cur_element->neighbors[current_level].second == nullptr)
-                    std::cout << "found null ptr in while" << std::endl;
-                std::cout << "height: " << cur_element->neighbors[current_level].second->id.first << std::endl;*/
                 cur_element = cur_element->neighbors[current_level].second;
-                //std::cout << "end middle while" << std::endl;
                 auto top_level = cur_element->height-1;
-                //std::cout << "top_level: " << top_level << std::endl;
                 if (current_level < top_level) {
                         current_level = top_level;
                         seen_element = nullptr;
