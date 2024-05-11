@@ -166,39 +166,19 @@ struct SkipList {
                         current_level = top_level;
                         seen_element = nullptr;
                 }
-                //std::cout << "end while" << std::endl;
         }
-        //std::cout << "finished find representative while" << std::endl;
 
         if (seen_element == cur_element) {
-        //std::cout << "finished find representative" << std::endl;
                 return seen_element;
         } else {
+        // skiplist is not cyclic so find the leftmost element
                 while (cur_element->neighbors[current_level].first != nullptr) {
                         cur_element = cur_element->neighbors[current_level].first;
                         current_level = cur_element->height - 1;
                 }
-        //std::cout << "finished find representative" << std::endl;
                 return cur_element;
         }
-        //std::cout << "finished find representative" << std::endl;
     }
-
-    /*void update_edge_values(sequence<SkipListElement*> nodes) {
-            parallel_for(0, nodes.size(), [&](size_t i) {
-                if (!nodes[i]->is_vertex && nodes[i] != nullptr) {
-                    auto left = nodes[i]->get_left(0);
-                    while (left->is_vertex && left != nodes[i]) {
-                        left = left->get_left(0);
-                    }
-                    if (left != nodes[i]) {
-                        nodes[i] -> CASvalue(nodes[i]->values[0],
-                           std::make_pair(left->id.first ^ nodes[i]->id.first,
-                                left->id.second ^ nodes[i]->id.second));
-                   }
-                }
-            });
-    }*/
 
     void join(SkipListElement* left, SkipListElement* right) {
             size_t level = 0;
@@ -216,23 +196,19 @@ struct SkipList {
     }
 
     SkipListElement* split(SkipListElement* this_element) {
-            SkipListElement* successor = nullptr; //this_element->get_right(0);
+            SkipListElement* successor = nullptr;
             SkipListElement* cur_element = this_element;
 
             size_t level = 0;
 
-            //SkipListElement* next;
-            while(cur_element != nullptr) { // && (next = cur_element->neighbors[level].second) != nullptr) {
+            while(cur_element != nullptr) {
                 SkipListElement* next = cur_element->neighbors[level].second;
-                if (next != nullptr && //(next = cur_element->neighbors[level].second) != nullptr) {
+                if (next != nullptr &&
                         cur_element->CASright(level, next, nullptr)) {
                         if (level == 0) {
                            successor = next;
-                           /*if (cur_element->is_vertex)
-                                cur_element->values[0] = std::make_pair(0, 0);*/
                         }
-                        //cur_element->neighbors[level].second = nullptr;
-                        next->neighbors[level].first = nullptr;
+                        next->CASleft(level, cur_element, nullptr);
                         cur_element = find_left_parent(level, cur_element);
                         level++;
                }
