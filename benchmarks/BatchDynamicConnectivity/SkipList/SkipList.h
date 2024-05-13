@@ -219,41 +219,27 @@ struct SkipList {
             return successor;
     }
 
-    /* The augmented skip list can take any arbitrary associative, commutative function. Here, it is
-     * implemented using the XOR function. */
-    void update_top_down(size_t level, SkipListElement* this_element) {
-            if (level == 0) {
-                    if (this_element->height == 1) {
-                        this_element->update_level = UINT_E_MAX;
-                    }
-                    return;
-            }
+    sequence<std::pair<SkipListElement*, SkipListElement*>>
+        find_left_parents(size_t level, sequence<SkipListElement*> elements) {
 
-            if (this_element->update_level < level) {
-                    update_top_down(level - 1, this_element);
-            }
+        sequence<std::pair<SkipListElement*, SkipListElement*>> parents = new sequence<std::pair<SkipListElement*,
+            SkipListElement*>>(elements.size());
+        parallel_for(0, elements.size(), [&](size_t i) {
+            parents[i] = std::make_pair(elements[i], find_left_parent(level, elements[i]));
+        });
 
-            sequence<sequence<std::pair<uintE, uintE>>> xor_total = this_element->values[level-1];
-            SkipListElement* curr = this_element->neighbors[level-1].second;
-            // TODO: why height < level + 1? shouldn't height be large enough not small enough?...
-            while (curr != nullptr && curr->height < level + 1) {
-                    if (curr->update_level != UINT_E_MAX && curr->update_level < level) {
-                            update_top_down(level-1, curr);
-                    }
+        return parents;
+    }
 
-                    parallel_for(0, xor_total.size(), [&] (size_t ii) {
-                            parallel_for(0, xor_total[ii].size(), [&] (size_t ij) {
-                                xor_total[ii][ij].first ^= curr->values[level-1][ii][ij].first;
-                                xor_total[ii][ij].second ^= curr->values[level-1][ii][ij].second;
-                            });
-                    });
-                    curr = curr->neighbors[level-1].second;
-            }
-            this_element->values[level] = xor_total;
+    /* Bottom-up update method */
+    void batch_update_xor(sequence<std::pair<SkipListElement*,
+            sequence<sequence<std::pair<uintE, uintE>>>>>* new_values) {
+        if (new_values != nullptr) {
+            size_t level = 0;
 
-            if(this_element->height == level+1) {
-                    this_element->update_level = UINT_E_MAX;
-            }
+            sequence<SkipListElement*> elements = new sequence<SkipListElement*>(new_values.size());
+            auto left_parents = find_left_parents(level, elements);
+        }
     }
 
     void batch_update(sequence<std::pair<SkipListElement*,
@@ -382,39 +368,6 @@ struct SkipList {
     }
 
     // TODO: get size function using the new size attribute
-
-    sequence<sequence<std::pair<uintE, uintE>>> get_subsequence_sum(SkipListElement* left, SkipListElement* right) {
-            size_t level = 0;
-            sequence<sequence<std::pair<uintE, uintE>>> xor_sums = right->values[level];
-
-            while(left != right) {
-                    level = std::min(left->height, right->height) - 1;
-                    if (level == left->height-1) {
-                        /*auto first_level_values = left->values[0];
-                        if (level != 0 || (level == 0 && first_level_values.first != first_level_values.second)) {*/
-                        parallel_for(0, xor_sums.size(), [&](size_t ii) {
-                                parallel_for(0, xor_sums[ii].size(), [&](size_t ij) {
-                                    xor_sums[ii][ij].first ^= left->values[level][ii][ij].first;
-                                    xor_sums[ii][ij].second ^= left->values[level][ii][ij].second;
-                            });
-                        });
-                        // }
-                        left = left->neighbors[level].second;
-                    } else {
-                        right = right->neighbors[level].first;
-                        /*auto first_level_values = right->values[0];
-                        if (level != 0 || (level == 0 && first_level_values.first != first_level_values.second)) {*/
-                        parallel_for(0, xor_sums.size(), [&](size_t ii) {
-                                parallel_for(0, xor_sums[ii].size(), [&](size_t ij) {
-                                    xor_sums[ii][ij].first ^= right->values[level][ii][ij].first;
-                                    xor_sums[ii][ij].second ^= right->values[level][ii][ij].second;
-                            });
-                        });
-                        //}
-                    }
-            }
-            return xor_sums;
-    }
 
     // Get the sum of the entire sequence
     sequence<sequence<std::pair<uintE, uintE>>> get_sum(SkipListElement* this_element) {
