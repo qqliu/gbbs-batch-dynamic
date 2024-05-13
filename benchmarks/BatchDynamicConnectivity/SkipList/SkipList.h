@@ -198,17 +198,26 @@ struct SkipList {
         }
     }
 
-    void join(SkipListElement* left, SkipListElement* right) {
+    sequence<std::pair<SkipListElement*, SkipListElement*>>
+        join(SkipListElement* left, SkipListElement* right) {
             size_t level = 0;
+            sequence<std::pair<SkipListElement*, SkipListElement*>>
+                update_pairs = sequence<std::pair<SkipListElement*, SkipListElement*>>(std::max(left->height,
+                   right->height), std::make_pair(UINT_E_MAX, UINT_E_MAX));
+
+            index = 0;
+            update_pairs[index] = std::make_pair(left, right);
             while(left != nullptr && right != nullptr) {
                     if (left->neighbors[level].second == nullptr &&
                                 left->CASright(level, nullptr, right)) {
                             right->CASleft(level, nullptr, left);
                             left = find_left_parent(level, left);
                             right = find_right_parent(level, right);
+                            update_pairs[index] = std::make_pair(left, right);
                             level++;
+                            index++;
                     } else {
-                            return;
+                            return update_pairs;
                     }
             }
     }
@@ -260,7 +269,7 @@ struct SkipList {
                 element->values[0] = vals;
             });
 
-            SkipListElement* root = find_representative(this_element);
+            SkipListElement* root = find_representative(new_values[0].first);
             size_t max_height = root->height;
 
             size_t level = 1;
@@ -314,7 +323,7 @@ struct SkipList {
                 element->values[0] = vals;
             });
 
-            SkipListElement* root = find_representative(this_element);
+            SkipListElement* root = find_representative(new_values[0].first);
             size_t max_height = root->height;
 
             size_t level = 1;
@@ -355,28 +364,25 @@ struct SkipList {
         }
     }
 
-    // TODO: HERE
     void batch_join(sequence<std::pair<SkipListElement*, SkipListElement*>>* joins) {
             sequence<std::pair<SkipListElement*, SkipListElement*>>& joins_ref = *joins;
-            //auto update_nodes = sequence<SkipListElement*>(2 * joins->size());
-            auto join_lefts = sequence<std::pair<SkipListElement*,
+            auto join_rights = sequence<std::pair<SkipListElement*,
                  sequence<sequence<std::pair<uintE, uintE>>>>>(joins->size());
+
+            sequence<sequence<SkipListElement*>> elements = sequence<sequence<SkipListElement*>>(joins->size());
+            sequence<size_t> sizes = sequence<size_t>(joins->size());
+
             parallel_for(0, joins->size(), [&] (size_t i) {
-                /*auto left = joins_ref[i].first;
-                auto right = joins_ref[i].second;*/
-                join(joins_ref[i].first, joins_ref[i].second);
-                //update_nodes[2 * i] = left;
-                //update_nodes[2 * i + 1] = right;
-                join_lefts[i] = std::make_pair(joins_ref[i].first, joins_ref[i].first->values[0]);
+                elements[i] = join(joins_ref[i].first, joins_ref[i].second);
+                join_rights[i] = std::make_pair(joins_ref[i].second, joins_ref[i].second->values[0]);
+                sizes[i] = elements[i].size();
             });
 
-            //update_edge_values(update_nodes);
+            auto total_size = parlay::scan_inplace(sizes);
+            sequence<SkipListElement*> all_updated_elements = sequence<SkipListElement*>(total_size, nullptr);
 
-            /*parallel_for(0, joins->size(), [&] (size_t i) {
-                join_lefts[i] = std::make_pair(joins_ref[i].first, joins_ref[i].first->values[0]);
-            });*/
-
-            batch_update(&join_lefts);
+            // TODO: I am here.
+            batch_update(&join_rights);
     }
 
     sequence<SkipListElement*> batch_split(sequence<SkipListElement*>* splits) {
