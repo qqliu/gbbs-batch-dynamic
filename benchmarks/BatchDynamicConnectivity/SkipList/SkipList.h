@@ -14,7 +14,9 @@ struct SkipList {
     struct SkipListElement {
         size_t height;
         size_t lowest_needs_update = 0;
+
         size_t size = 1;
+        size_t old_size = 1;
 
         using pointers = std::pair<SkipListElement*, SkipListElement*>;
         using height_array = sequence<pointers>;
@@ -22,6 +24,8 @@ struct SkipList {
 
         height_array neighbors;
         values_array values;
+        values_array old_values;
+
         uintE update_level;
         bool split_mark;
         SkipListElement* twin;
@@ -55,10 +59,15 @@ struct SkipList {
                 id = id_;
                 probability_base = pb;
                 num_duplicates = num_dup;
+
                 size = size_;
+                old_size = size_;
 
                 parallel_for(1, _h, [&](size_t i){
                     values[i] = sequence<sequence<std::pair<uintE, uintE>>>(num_duplicates,
+                            sequence<std::pair<uintE, uintE>>(ceil(log(m)/log(pb)), std::make_pair(0, 0)));
+
+                    old_values[i] = sequence<sequence<std::pair<uintE, uintE>>>(num_duplicates,
                             sequence<std::pair<uintE, uintE>>(ceil(log(m)/log(pb)), std::make_pair(0, 0)));
                 });
         }
@@ -225,7 +234,7 @@ struct SkipList {
         sequence<std::pair<SkipListElement*, SkipListElement*>> parents = new sequence<std::pair<SkipListElement*,
             SkipListElement*>>(elements.size());
         parallel_for(0, elements.size(), [&](size_t i) {
-            parents[i] = std::make_pair(elements[i], find_left_parent(level, elements[i]));
+            parents[i] = std::make_pair(find_left_parent(level, elements[i]), elements[i]);
         });
 
         return parents;
@@ -239,6 +248,23 @@ struct SkipList {
 
             sequence<SkipListElement*> elements = new sequence<SkipListElement*>(new_values.size());
             auto left_parents = find_left_parents(level, elements);
+
+            auto get_key = [&] (const std::pair<SkipListElement*, SkipListElement*>& elm) { return elm.first; };
+            parlay::integer_sort_inplace(parlay::make_slice(left_parents), get_key);
+
+            // get unique parents
+            auto bool_seq = parlay::delayed_seq<bool>(left_parents.size() + 1, [&] (size_t i) {
+                return (i == 0) || (i == left_parents.size()) || (left_parents[i].first != left_parents[i-1].first);
+            });
+
+            auto parent_starts = parlay::pack_index(bool_seq);
+
+            // iterate through all parents and update their values
+            parallel_for(0, parent_starts.size(), [&](size_t i) {
+                auto index = parent_starts[i];
+                auto parent = left_parents[index].first;
+                auto new_values = parent->values[level];
+            });
         }
     }
 
