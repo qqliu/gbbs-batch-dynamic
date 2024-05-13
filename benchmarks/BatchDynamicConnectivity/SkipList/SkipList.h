@@ -240,15 +240,12 @@ struct SkipList {
                             update_top_down(level-1, curr);
                     }
 
-                    /*auto first_level_values = curr->values[0];
-                    if (level-1 != 0 || (level-1 == 0 && first_level_values.first != first_level_values.second)) {*/
                     parallel_for(0, xor_total.size(), [&] (size_t ii) {
                             parallel_for(0, xor_total[ii].size(), [&] (size_t ij) {
                                 xor_total[ii][ij].first ^= curr->values[level-1][ii][ij].first;
                                 xor_total[ii][ij].second ^= curr->values[level-1][ii][ij].second;
                             });
                     });
-                    //}
                     curr = curr->neighbors[level-1].second;
             }
             this_element->values[level] = xor_total;
