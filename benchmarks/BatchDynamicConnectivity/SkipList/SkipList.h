@@ -235,6 +235,7 @@ struct SkipList {
 
             sequence<sequence<std::pair<uintE, uintE>>> xor_total = this_element->values[level-1];
             SkipListElement* curr = this_element->neighbors[level-1].second;
+            // TODO: why height < level + 1? shouldn't height be large enough not small enough?...
             while (curr != nullptr && curr->height < level + 1) {
                     if (curr->update_level != UINT_E_MAX && curr->update_level < level) {
                             update_top_down(level-1, curr);
