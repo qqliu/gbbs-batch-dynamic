@@ -265,7 +265,7 @@ struct SkipList {
             }
 
             if (this_element->update_level_xor < level) {
-                    update_top_down(level - 1, this_element);
+                    update_top_down_xor(level - 1, this_element);
             }
 
             sequence<sequence<std::pair<uintE, uintE>>> xor_total = this_element->values[level-1];
@@ -273,7 +273,7 @@ struct SkipList {
             // only update if neighbor has height at most current level
             while (curr != nullptr && curr->height < level) {
                     if (curr->update_level_xor != UINT_E_MAX && curr->update_level_xor < level) {
-                            update_top_down(level-1, curr);
+                            update_top_down_xor(level-1, curr);
                     }
 
                     parallel_for(0, xor_total.size(), [&] (size_t ii) {
@@ -297,87 +297,150 @@ struct SkipList {
     void update_top_down_sum(size_t level, SkipListElement* this_element) {
             if (level == 0) {
                     if (this_element->height == 1) {
-                        this_element->update_level = UINT_E_MAX;
+                        this_element->update_level_sum = UINT_E_MAX;
                     }
                     return;
             }
 
-            if (this_element->update_level < level) {
-                    update_top_down(level - 1, this_element);
+            if (this_element->update_level_sum < level) {
+                    update_top_down_sum(level - 1, this_element);
             }
 
-            sequence<sequence<std::pair<uintE, uintE>>> xor_total = this_element->values[level-1];
+            size_t sum_total = this_element->sum[level-1];
             SkipListElement* curr = this_element->neighbors[level-1].second;
             // only update if neighbor has height at most current level
             while (curr != nullptr && curr->height < level) {
-                    if (curr->update_level != UINT_E_MAX && curr->update_level < level) {
-                            update_top_down(level-1, curr);
+                    if (curr->update_level_sum != UINT_E_MAX && curr->update_level_sum < level) {
+                            update_top_down_sum(level-1, curr);
                     }
 
-                    parallel_for(0, xor_total.size(), [&] (size_t ii) {
-                            parallel_for(0, xor_total[ii].size(), [&] (size_t ij) {
-                                xor_total[ii][ij].first ^= curr->values[level-1][ii][ij].first;
-                                xor_total[ii][ij].second ^= curr->values[level-1][ii][ij].second;
-                            });
-                    });
+                    sum_total += curr->sum[level-1];
                     curr = curr->neighbors[level-1].second;
             }
-            this_element->values[level] = xor_total;
+            this_element->sum[level] = sum_total;
 
             if(this_element->height == level+1) {
-                    this_element->update_level = UINT_E_MAX;
+                    this_element->update_level_sum = UINT_E_MAX;
             }
     }
 
+    void batch_update_xor(sequence<std::pair<SkipListElement*,
+            sequence<sequence<std::pair<uintE, uintE>>>>>* new_values) {
+        auto top_nodes = sequence<SkipListElement*>(new_values->size(), nullptr);
+        sequence<std::pair<SkipListElement*, sequence<sequence<std::pair<uintE, uintE>>>>>&
+            new_values_ref = *new_values;
+        if (new_values != nullptr) {
+            parallel_for(0, new_values->size(), [&](size_t i) {
+                    SkipListElement* this_element = new_values_ref[i].first;
+                    sequence<sequence<std::pair<uintE, uintE>>>
+                        this_element_values = new_values_ref[i].second;
 
+                    parallel_for(0, this_element_values.size(), [&](size_t ii) {
+                        parallel_for(0, this_element_values[ii].size(), [&](size_t ij) {
+                            this_element->values[0][ii][ij] = this_element_values[ii][ij];
+                        });
+                    });
+
+                    size_t level = 0;
+                    SkipListElement* curr = this_element;
+                    while(true) {
+                        uintE curr_update_level = curr->update_level_xor;
+                        if (curr_update_level == UINT_E_MAX && gbbs::atomic_compare_and_swap(&curr->update_level_xor,
+                                UINT_E_MAX, (uintE) level)) {
+                            level = curr->height-1;
+                            SkipListElement* parent = find_left_parent(level, curr);
+
+                            if (parent == nullptr) {
+                                top_nodes[i] = curr;
+                                break;
+                            } else {
+                                curr = parent;
+                                level++;
+                            }
+                        } else {
+                            // Some other execution claimed this ancestor
+                            if (curr_update_level > level) {
+                                uintE c = curr->update_level_xor;
+                                while(c > level && !gbbs::atomic_compare_and_swap(&curr->update_level_xor, (uintE)c,
+                                            (uintE)level))
+                                    c = curr->update_level_xor;
+                            }
+                            top_nodes[i] = nullptr;
+                            break;
+                        }
+                    }
+            });
+
+            parallel_for(0, new_values->size(), [&](size_t i){
+                    if (top_nodes[i] != nullptr) {
+                        update_top_down_xor(top_nodes[i]->height-1, top_nodes[i]);
+                    }
+            });
+        }
+    }
+
+    void batch_update_sum(sequence<std::pair<SkipListElement*, size_t>>* new_values) {
+        auto top_nodes = sequence<SkipListElement*>(new_values->size(), nullptr);
+        sequence<std::pair<SkipListElement*, size_t>>&
+            new_values_ref = *new_values;
+        if (new_values != nullptr) {
+            parallel_for(0, new_values->size(), [&](size_t i) {
+                    SkipListElement* this_element = new_values_ref[i].first;
+                    size_t new_size = new_values_ref[i].second;
+
+                    this_element->size[0] = new_size;
+
+                    size_t level = 0;
+                    SkipListElement* curr = this_element;
+                    while(true) {
+                        uintE curr_update_level = curr->update_level_sum;
+                        if (curr_update_level == UINT_E_MAX && gbbs::atomic_compare_and_swap(&curr->update_level_sum,
+                                UINT_E_MAX, (uintE) level)) {
+                            level = curr->height-1;
+                            SkipListElement* parent = find_left_parent(level, curr);
+
+                            if (parent == nullptr) {
+                                top_nodes[i] = curr;
+                                break;
+                            } else {
+                                curr = parent;
+                                level++;
+                            }
+                        } else {
+                            // Some other execution claimed this ancestor
+                            if (curr_update_level > level) {
+                                uintE c = curr->update_level_sum;
+                                while(c > level && !gbbs::atomic_compare_and_swap(&curr->update_level_sum, (uintE)c,
+                                            (uintE)level))
+                                    c = curr->update_level_sum;
+                            }
+                            top_nodes[i] = nullptr;
+                            break;
+                        }
+                    }
+            });
+
+            parallel_for(0, new_values->size(), [&](size_t i){
+                    if (top_nodes[i] != nullptr) {
+                        update_top_down_sum(top_nodes[i]->height-1, top_nodes[i]);
+                    }
+            });
+        }
+    }
 
     void batch_join(sequence<std::pair<SkipListElement*, SkipListElement*>>* joins) {
             sequence<std::pair<SkipListElement*, SkipListElement*>>& joins_ref = *joins;
-            auto join_rights = sequence<std::pair<SkipListElement*,
+            auto join_lefts = sequence<std::pair<SkipListElement*,
                  sequence<sequence<std::pair<uintE, uintE>>>>>(joins->size());
-
-            sequence<sequence<SkipListElement*>> elements = sequence<sequence<SkipListElement*>>(joins->size());
-            sequence<size_t> sizes = sequence<size_t>(joins->size());
-
+            auto join_left_sizes = sequence<std::pair<SkipListElement*, size_t>>(joins->size());
             parallel_for(0, joins->size(), [&] (size_t i) {
-                elements[i] = join(joins_ref[i].first, joins_ref[i].second);
-                join_rights[i] = std::make_pair(joins_ref[i].second, joins_ref[i].second->values[0]);
-                sizes[i] = elements[i].size();
+                join(joins_ref[i].first, joins_ref[i].second);
+                join_lefts[i] = std::make_pair(joins_ref[i].first, joins_ref[i].first->values[0]);
+                join_left_sizes[i] = std::make_pair(joins_ref[i].first, joins_ref[i].first->size[0]);
             });
 
-            auto total_size = parlay::scan_inplace(sizes);
-            sequence<SkipListElement*> all_updated_elements = sequence<SkipListElement*>(total_size, nullptr);
-            parallel_for(0, sizes.size(), [&](size_t ll) {
-                parallel_for(0, elements[ll].size(), [&](size_t kk){
-                    all_updated_elements[sizes[ll]+kk] = elements[ll][kk];
-                });
-            });
-
-            parlay::integer_sort_inplace(parlay::make_slice(all_updated_elements));
-
-            // get unique elements
-            auto bool_seq = parlay::delayed_seq<bool>(all_updated_elements.size() + 1, [&] (size_t i) {
-                return (i == 0) || (i == all_updated_elements.size())
-                    || (all_updated_elements[i].first != all_updated_elements[i-1].first);
-            });
-
-            auto parent_starts = parlay::pack_index(bool_seq);
-
-            sequence<std::pair<SkipListElement*, sequence<sequence<std::pair<uintE, uintE>>>>>
-                unique_updated_elements = sequence<std::pair<SkipListElement*, sequence<sequence<
-                std::pair<uintE, uintE>>>>>(parent_starts.size() - 1);
-            sequence<std::pair<SkipListElement*, size_t>> unique_sizes_update =
-               sequene<std::pair<SkipListElement*, size_t>>(parent_starts.size() - 1);
-            parallel_for(0, parent_starts.size()-1, [&](size_t ll){
-                auto element = all_updated_elements[parent_starts[ll]];
-                unique_updated_elements[i] = std::make_pair(element,
-                        element->values[0]);
-                unique_sizes_update[i] = std::make_pair(element, element->size[0]);
-            });
-
-
-            batch_update_xor(&unique_updated_elements);
-            batch_update_sum(&unique_sizes_update);
+            batch_update_xor(&join_lefts);
+            batch_update_sum(&join_left_sizes);
     }
 
     sequence<SkipListElement*> batch_split(sequence<SkipListElement*>* splits) {
@@ -390,8 +453,9 @@ struct SkipList {
             // Perform updates but only if some other thread hasn't already performed the update
             parallel_for(0, splits->size(), [&](size_t i){
                 SkipListElement* curr = splits_ref[i];
-                bool can_proceed = curr->update_level == UINT_E_MAX
-                    && gbbs::atomic_compare_and_swap(&curr->update_level, UINT_E_MAX, (uintE)0);
+                bool can_proceed = curr -> (update_level_xor == UINT_E_MAX) && (update_level_sum == UINT_E_MAX)
+                    && gbbs::atomic_compare_and_swap(&curr->update_level_xor, UINT_E_MAX, (uintE)0)
+                    && gbbs::atomic_compare_and_swap(&curr->update_level_sum, UINT_E_MAX, (uintE)0);
 
                 if (can_proceed) {
                     sequence<sequence<std::pair<uintE, uintE>>> xor_sums = curr->values[0];
