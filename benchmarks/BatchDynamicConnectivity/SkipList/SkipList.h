@@ -20,14 +20,13 @@ struct SkipList {
 
         height_array neighbors;
         values_array values;
-        values_array old_values;
 
         sequence<size_t> size;
-        sequence<size_t> old_size;
 
         using pointers = std::pair<SkipListElement*, SkipListElement*>;
 
-        uintE update_level;
+        uintE update_level_xor;
+        uintE update_level_sum;
         bool split_mark;
         SkipListElement* twin;
         bool is_vertex;
@@ -35,7 +34,10 @@ struct SkipList {
         double probability_base;
         int num_duplicates;
 
-        SkipListElement(): height(0), lowest_needs_update(0), size(1) { update_level = UINT_E_MAX; split_mark = false;
+        SkipListElement(): height(0), lowest_needs_update(0), size(1) {
+            update_level_xor = UINT_E_MAX;
+            update_level_sum = UINT_E_MAX;
+            split_mark = false;
             twin = nullptr;
             is_vertex = false;
             id = std::make_pair(UINT_E_MAX, UINT_E_MAX);
@@ -49,14 +51,13 @@ struct SkipList {
                 std::make_pair(UINT_E_MAX, UINT_E_MAX), double pb = 2, int num_dup = 2, size_t m = 10, uintE size_ = 1):
             height(_h), lowest_needs_update(_h) {
                 neighbors.resize(_h);
-                update_level = UINT_E_MAX;
+                update_level_xor = UINT_E_MAX;
+                update_level_sum = UINT_E_MAX;
                 neighbors[0].first = _l;
                 neighbors[0].second = _r;
                 values.resize(_h);
-                old_values.resize(_h);
 
                 size.resize(_h);
-                old_size.resize(_h);
 
                 values[0] = _vals;
                 split_mark = false;
@@ -67,17 +68,12 @@ struct SkipList {
                 num_duplicates = num_dup;
 
                 size = size_;
-                old_size = size_;
 
                 parallel_for(1, _h, [&](size_t i){
                     values[i] = sequence<sequence<std::pair<uintE, uintE>>>(num_duplicates,
                             sequence<std::pair<uintE, uintE>>(ceil(log(m)/log(pb)), std::make_pair(0, 0)));
 
-                    old_values[i] = sequence<sequence<std::pair<uintE, uintE>>>(num_duplicates,
-                            sequence<std::pair<uintE, uintE>>(ceil(log(m)/log(pb)), std::make_pair(0, 0)));
-
                     size[i] = 1;
-                    old_size[i] = 1;
                 });
         }
 
@@ -258,111 +254,82 @@ struct SkipList {
         return parents;
     }
 
-    /* Bottom-up update method */
-    void batch_update_xor(sequence<std::pair<SkipListElement*,
-            sequence<sequence<std::pair<uintE, uintE>>>>>* new_values) {
-        if (new_values != nullptr) {
-            parallel_for(0, new_values.size(), [&](size_t i){
-                auto element = new_values[i]->first;
-                auto vals = new_values[i]->second;
+    /* The augmented skip list can take any arbitrary associative, commutative function. Here, it is
+     * implemented using the XOR function. */
+    void update_top_down_xor(size_t level, SkipListElement* this_element) {
+            if (level == 0) {
+                    if (this_element->height == 1) {
+                        this_element->update_level_xor = UINT_E_MAX;
+                    }
+                    return;
+            }
 
-                element->values[0] = vals;
-            });
+            if (this_element->update_level_xor < level) {
+                    update_top_down(level - 1, this_element);
+            }
 
-            SkipListElement* root = find_representative(new_values[0].first);
-            size_t max_height = root->height;
+            sequence<sequence<std::pair<uintE, uintE>>> xor_total = this_element->values[level-1];
+            SkipListElement* curr = this_element->neighbors[level-1].second;
+            // only update if neighbor has height at most current level
+            while (curr != nullptr && curr->height < level) {
+                    if (curr->update_level_xor != UINT_E_MAX && curr->update_level_xor < level) {
+                            update_top_down(level-1, curr);
+                    }
 
-            size_t level = 1;
-
-            while(level < max_height) {
-                sequence<SkipListElement*> elements = new sequence<SkipListElement*>(new_values.size());
-                auto left_parents = find_left_parents(level, elements);
-
-                auto get_key = [&] (const std::pair<SkipListElement*, SkipListElement*>& elm) { return elm.first; };
-                parlay::integer_sort_inplace(parlay::make_slice(left_parents), get_key);
-
-                // get unique parents
-                auto bool_seq = parlay::delayed_seq<bool>(left_parents.size() + 1, [&] (size_t i) {
-                    return (i == 0) || (i == left_parents.size()) || (left_parents[i].first != left_parents[i-1].first);
-                });
-
-                auto parent_starts = parlay::pack_index(bool_seq);
-
-                // iterate through all parents and update their values
-                parallel_for(0, parent_starts.size(), [&](size_t i) {
-                    auto index = parent_starts[i];
-                    auto parent = left_parents[index].first;
-                    auto updated_values = parent->values[level];
-
-                    parent->old_values[level] = values[level];
-
-                    for (size_t j = starts[i]; j < starts[i + 1]; j++) {
-                        auto cur_child = left_parents[j].second;
-                        parallel_for(0, updated_values.size(), [&] (size_t k){
-                            parallel_for(0, updated_values[k].size(), [&] (size_t ll) {
-                                updated_values[k][ll] ^= cur_child->old_values[level-1][k][ll];
-                                updated_values[k][ll] ^= cur_child->values[level-1][k][ll];
+                    parallel_for(0, xor_total.size(), [&] (size_t ii) {
+                            parallel_for(0, xor_total[ii].size(), [&] (size_t ij) {
+                                xor_total[ii][ij].first ^= curr->values[level-1][ii][ij].first;
+                                xor_total[ii][ij].second ^= curr->values[level-1][ii][ij].second;
                             });
-                        });
-                        parent->old_values[level] = values[level];
-                        parent->values[level] = updated_values;
-                    }
-                });
-                level++;
+                    });
+                    curr = curr->neighbors[level-1].second;
             }
-        }
+            this_element->values[level] = xor_total;
+
+            if(this_element->height == level+1) {
+                    this_element->update_level_xor = UINT_E_MAX;
+            }
     }
 
-    /* Bottom-up update method for sizes */
-    void batch_update_size(sequence<std::pair<SkipListElement*, size_t>>* new_values) {
-        if (new_values != nullptr) {
-            parallel_for(0, new_values.size(), [&](size_t i){
-                auto element = new_values[i]->first;
-                auto vals = new_values[i]->second;
 
-                element->values[0] = vals;
-            });
-
-            SkipListElement* root = find_representative(new_values[0].first);
-            size_t max_height = root->height;
-
-            size_t level = 1;
-
-            while(level < max_height) {
-                sequence<SkipListElement*> elements = new sequence<SkipListElement*>(new_values.size());
-                auto left_parents = find_left_parents(level, elements);
-
-                auto get_key = [&] (const std::pair<SkipListElement*, SkipListElement*>& elm) { return elm.first; };
-                parlay::integer_sort_inplace(parlay::make_slice(left_parents), get_key);
-
-                // get unique parents
-                auto bool_seq = parlay::delayed_seq<bool>(left_parents.size() + 1, [&] (size_t i) {
-                    return (i == 0) || (i == left_parents.size()) || (left_parents[i].first != left_parents[i-1].first);
-                });
-
-                auto parent_starts = parlay::pack_index(bool_seq);
-
-                // iterate through all parents and update their values
-                parallel_for(0, parent_starts.size(), [&](size_t i) {
-                    auto index = parent_starts[i];
-                    auto parent = left_parents[index].first;
-                    auto updated_values = parent->values[level];
-
-                    parent->old_values[level] = values[level];
-
-                    for (size_t j = starts[i]; j < starts[i + 1]; j++) {
-                        auto cur_child = left_parents[j].second;
-                        updated_size -= cur_child->old_size[level-1];
-                        updated_size += cur_child->size[level-1];
-
-                        parent->old_size[level] = parent->size[level];
-                        parent->size[level] = updated_size;
+    /* The augmented skip list can take any arbitrary associative, commutative function. Here, it is
+     * implemented using the SUM function. */
+    void update_top_down_sum(size_t level, SkipListElement* this_element) {
+            if (level == 0) {
+                    if (this_element->height == 1) {
+                        this_element->update_level = UINT_E_MAX;
                     }
-                });
-                level++;
+                    return;
             }
-        }
+
+            if (this_element->update_level < level) {
+                    update_top_down(level - 1, this_element);
+            }
+
+            sequence<sequence<std::pair<uintE, uintE>>> xor_total = this_element->values[level-1];
+            SkipListElement* curr = this_element->neighbors[level-1].second;
+            // only update if neighbor has height at most current level
+            while (curr != nullptr && curr->height < level) {
+                    if (curr->update_level != UINT_E_MAX && curr->update_level < level) {
+                            update_top_down(level-1, curr);
+                    }
+
+                    parallel_for(0, xor_total.size(), [&] (size_t ii) {
+                            parallel_for(0, xor_total[ii].size(), [&] (size_t ij) {
+                                xor_total[ii][ij].first ^= curr->values[level-1][ii][ij].first;
+                                xor_total[ii][ij].second ^= curr->values[level-1][ii][ij].second;
+                            });
+                    });
+                    curr = curr->neighbors[level-1].second;
+            }
+            this_element->values[level] = xor_total;
+
+            if(this_element->height == level+1) {
+                    this_element->update_level = UINT_E_MAX;
+            }
     }
+
+
 
     void batch_join(sequence<std::pair<SkipListElement*, SkipListElement*>>* joins) {
             sequence<std::pair<SkipListElement*, SkipListElement*>>& joins_ref = *joins;
