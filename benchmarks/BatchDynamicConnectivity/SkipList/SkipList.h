@@ -15,6 +15,8 @@ struct SkipList {
         size_t height;
         size_t lowest_needs_update = 0;
 
+        using pointers = std::pair<SkipListElement*, SkipListElement*>;
+
         using height_array = sequence<pointers>;
         using values_array = sequence<sequence<sequence<std::pair<uintE, uintE>>>>;
 
@@ -22,8 +24,6 @@ struct SkipList {
         values_array values;
 
         sequence<size_t> size;
-
-        using pointers = std::pair<SkipListElement*, SkipListElement*>;
 
         uintE update_level_xor;
         uintE update_level_sum;
@@ -66,8 +66,6 @@ struct SkipList {
                 id = id_;
                 probability_base = pb;
                 num_duplicates = num_dup;
-
-                size = size_;
 
                 parallel_for(1, _h, [&](size_t i){
                     values[i] = sequence<sequence<std::pair<uintE, uintE>>>(num_duplicates,
@@ -194,26 +192,18 @@ struct SkipList {
         }
     }
 
-    sequence<std::pair<SkipListElement*, SkipListElement*>>
-        join(SkipListElement* left, SkipListElement* right) {
+    void join(SkipListElement* left, SkipListElement* right) {
             size_t level = 0;
-            sequence<std::pair<SkipListElement*, SkipListElement*>>
-                update_pairs = sequence<std::pair<SkipListElement*, SkipListElement*>>(std::max(left->height,
-                   right->height), std::make_pair(UINT_E_MAX, UINT_E_MAX));
 
-            index = 0;
-            update_pairs[index] = std::make_pair(left, right);
             while(left != nullptr && right != nullptr) {
                     if (left->neighbors[level].second == nullptr &&
                                 left->CASright(level, nullptr, right)) {
                             right->CASleft(level, nullptr, left);
                             left = find_left_parent(level, left);
                             right = find_right_parent(level, right);
-                            update_pairs[index] = std::make_pair(left, right);
                             level++;
-                            index++;
                     } else {
-                            return update_pairs;
+                            return;
                     }
             }
     }
@@ -245,7 +235,7 @@ struct SkipList {
     sequence<std::pair<SkipListElement*, SkipListElement*>>
         find_left_parents(size_t level, sequence<SkipListElement*> elements) {
 
-        sequence<std::pair<SkipListElement*, SkipListElement*>> parents = new sequence<std::pair<SkipListElement*,
+        sequence<std::pair<SkipListElement*, SkipListElement*>> parents = sequence<std::pair<SkipListElement*,
             SkipListElement*>>(elements.size());
         parallel_for(0, elements.size(), [&](size_t i) {
             parents[i] = std::make_pair(find_left_parent(level, elements[i]), elements[i]);
@@ -306,7 +296,7 @@ struct SkipList {
                     update_top_down_sum(level - 1, this_element);
             }
 
-            size_t sum_total = this_element->sum[level-1];
+            size_t sum_total = this_element->size[level-1];
             SkipListElement* curr = this_element->neighbors[level-1].second;
             // only update if neighbor has height at most current level
             while (curr != nullptr && curr->height < level) {
@@ -314,10 +304,10 @@ struct SkipList {
                             update_top_down_sum(level-1, curr);
                     }
 
-                    sum_total += curr->sum[level-1];
+                    sum_total += curr->size[level-1];
                     curr = curr->neighbors[level-1].second;
             }
-            this_element->sum[level] = sum_total;
+            this_element->size[level] = sum_total;
 
             if(this_element->height == level+1) {
                     this_element->update_level_sum = UINT_E_MAX;
@@ -453,7 +443,7 @@ struct SkipList {
             // Perform updates but only if some other thread hasn't already performed the update
             parallel_for(0, splits->size(), [&](size_t i){
                 SkipListElement* curr = splits_ref[i];
-                bool can_proceed = curr -> (update_level_xor == UINT_E_MAX) && (update_level_sum == UINT_E_MAX)
+                bool can_proceed = (curr->update_level_xor == UINT_E_MAX) && (curr->update_level_sum == UINT_E_MAX)
                     && gbbs::atomic_compare_and_swap(&curr->update_level_xor, UINT_E_MAX, (uintE)0)
                     && gbbs::atomic_compare_and_swap(&curr->update_level_sum, UINT_E_MAX, (uintE)0);
 
@@ -534,7 +524,7 @@ struct SkipList {
     }
 
     // Get the SUM of the entire sequence
-    sequence<sequence<std::pair<uintE, uintE>>> get_sum(SkipListElement* this_element) {
+    size_t get_sum(SkipListElement* this_element) {
             SkipListElement* root = find_representative(this_element);
             size_t level = root->height-1;
             size_t sums = root->size[level];
@@ -727,33 +717,6 @@ inline void RunSkipList(uintE n) {
             three_left_parent->values[0][0][0].first <<
             three_left_parent->values[0][0][0].second << std::endl;
 
-    std::cout << "total sum 2, 3: " <<
-        skip_list.get_subsequence_sum(&skip_list_neighbors[1],
-            &skip_list_neighbors[2])[0][0].first << ", "
-        << skip_list.get_subsequence_sum(&skip_list_neighbors[1],
-            &skip_list_neighbors[2])[0][0].second << ", "
-            << std::endl;
-    std::cout << "total sum 1, 2: "
-        << skip_list.get_subsequence_sum(&skip_list_neighbors[0],
-            &skip_list_neighbors[1])[0][0].first
-        << skip_list.get_subsequence_sum(&skip_list_neighbors[0],
-            &skip_list_neighbors[1])[0][0].second << std::endl;
-    std::cout << "total sum 1, 3: "
-        << skip_list.get_subsequence_sum(&skip_list_neighbors[0],
-            &skip_list_neighbors[2])[0][0].first
-        << skip_list.get_subsequence_sum(&skip_list_neighbors[0],
-            &skip_list_neighbors[2])[0][0].second << std::endl;
-    std::cout << "total sum shouldn't work: "
-        << skip_list.get_subsequence_sum(&skip_list_neighbors[2],
-            &skip_list_neighbors[0])[0][0].first
-        << skip_list.get_subsequence_sum(&skip_list_neighbors[2],
-            &skip_list_neighbors[0])[0][0].second << std::endl;
-    std::cout << "total sum shouldn't work 4, 5: "
-        << skip_list.get_subsequence_sum(&skip_list_neighbors[3],
-            &skip_list_neighbors[4])[0][0].first
-        << skip_list.get_subsequence_sum(&skip_list_neighbors[3],
-            &skip_list_neighbors[4])[0][0].second << std::endl;
-
     std::cout << "representative node 1: " << skip_list.find_representative(&skip_list_neighbors[0])->values[0][0][0].first
         << std::endl;
     std::cout << "representative node 2: " << skip_list.find_representative(&skip_list_neighbors[1])->values[0][0][0].first
@@ -778,6 +741,17 @@ inline void RunSkipList(uintE n) {
         << skip_list.get_xor(&skip_list_neighbors[2])[0][0].second
         << std::endl;
 
+    std::cout << "total size subtree 1: "
+        << skip_list.get_sum(&skip_list_neighbors[0])
+        << skip_list.get_sum(&skip_list_neighbors[0])
+        << "; "
+        << skip_list.get_sum(&skip_list_neighbors[1]) << ", "
+        << skip_list.get_sum(&skip_list_neighbors[1])
+        << "; "
+        << skip_list.get_sum(&skip_list_neighbors[2]) << ", "
+        << skip_list.get_sum(&skip_list_neighbors[2])
+        << std::endl;
+
     std::cout << "total sum subtree 2: "
         << skip_list.get_xor(&skip_list_neighbors[3])[0][0].first << ", "
         << skip_list.get_xor(&skip_list_neighbors[3])[0][0].second << "; "
@@ -785,9 +759,21 @@ inline void RunSkipList(uintE n) {
         << skip_list.get_xor(&skip_list_neighbors[4])[0][0].second
         << std::endl;
 
+    std::cout << "total size subtree 2: "
+        << skip_list.get_sum(&skip_list_neighbors[3]) << ", "
+        << skip_list.get_sum(&skip_list_neighbors[3]) << "; "
+        << skip_list.get_sum(&skip_list_neighbors[4]) << ", "
+        << skip_list.get_sum(&skip_list_neighbors[4])
+        << std::endl;
+
     std::cout << "total sum subtree 3: "
         << skip_list.get_xor(&skip_list_neighbors[5])[0][0].first << ", "
         << skip_list.get_xor(&skip_list_neighbors[5])[0][0].second
+        << std::endl;
+
+    std::cout << "total size subtree 3: "
+        << skip_list.get_sum(&skip_list_neighbors[5]) << ", "
+        << skip_list.get_sum(&skip_list_neighbors[5])
         << std::endl;
 
     std::cout << "splitting some nodes" << std::endl;
@@ -815,19 +801,25 @@ inline void RunSkipList(uintE n) {
     std::cout << "total sum subtree 1: " << skip_list.get_xor(&skip_list_neighbors[0])[0][0].first << ", "
         << skip_list.get_xor(&skip_list_neighbors[1])[0][0].first << std::endl;
 
+    std::cout << "total size subtree 1: " << skip_list.get_sum(&skip_list_neighbors[0]) << ", "
+        << skip_list.get_sum(&skip_list_neighbors[1]) << std::endl;
+
     std::cout << "total sum subtree 2: "  << skip_list.get_xor(&skip_list_neighbors[2])[0][0].first
+        << std::endl;
+
+    std::cout << "total size subtree 2: "  << skip_list.get_sum(&skip_list_neighbors[2])
         << std::endl;
 
     std::cout << "total sum subtree 3: " << skip_list.get_xor(&skip_list_neighbors[3])[0][0].second << ", "
         << skip_list.get_xor(&skip_list_neighbors[4])[0][0].second
         << std::endl;
 
-    std::cout << "total sum subtree 6: " << skip_list.get_xor(&skip_list_neighbors[5])[0][0].first << std::endl;
+    std::cout << "total size subtree 3: " << skip_list.get_sum(&skip_list_neighbors[3]) << ", "
+        << skip_list.get_sum(&skip_list_neighbors[4])
+        << std::endl;
 
-    std::cout << "total sum 1, 2: " << skip_list.get_subsequence_sum(&skip_list_neighbors[0],
-            &skip_list_neighbors[1])[0][0].first << std::endl;
-    std::cout << "total sum 4, 5: " << skip_list.get_subsequence_sum(&skip_list_neighbors[3],
-            &skip_list_neighbors[4])[0][0].first << std::endl;
+    std::cout << "total sum subtree 6: " << skip_list.get_xor(&skip_list_neighbors[5])[0][0].first << std::endl;
+    std::cout << "total size subtree 6: " << skip_list.get_sum(&skip_list_neighbors[5]) << std::endl;
 
     std::cout << "joining more nodes" << std::endl;
     sequence<std::pair<SkipList::SkipListElement*, SkipList::SkipListElement*>> join_updates_1
@@ -855,9 +847,18 @@ inline void RunSkipList(uintE n) {
         << ", " << skip_list.get_xor(&skip_list_neighbors[2])[0][0].first
         << ", " << skip_list.get_xor(&skip_list_neighbors[5])[0][0].first << std::endl;
 
+    std::cout << "total size subtree 1: " << skip_list.get_sum(&skip_list_neighbors[0]) << ", "
+        << skip_list.get_sum(&skip_list_neighbors[1])
+        << ", " << skip_list.get_sum(&skip_list_neighbors[2])
+        << ", " << skip_list.get_sum(&skip_list_neighbors[5]) << std::endl;
+
     std::cout << "total sum subtree 2: " << skip_list.get_xor(&skip_list_neighbors[3])[0][0].first << ", "
         << skip_list.get_xor(&skip_list_neighbors[4])[0][0].first
         << std::endl;
+    std::cout << "total size subtree 2: " << skip_list.get_sum(&skip_list_neighbors[3]) << ", "
+        << skip_list.get_sum(&skip_list_neighbors[4])
+        << std::endl;
+
 
 }
 
