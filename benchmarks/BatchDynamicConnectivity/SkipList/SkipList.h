@@ -459,26 +459,26 @@ struct SkipList {
 
                 if (can_proceed) {
                     sequence<sequence<std::pair<uintE, uintE>>> xor_sums = curr->values[0];
+                    size_t old_size = curr->size[0];
                     size_t level = 0;
                     while(true) {
                         if(level < curr->height - 1) {
                             level++;
                             curr->values[level] = xor_sums;
+                            curr->size[level] = old_size;
                         } else {
                             curr = curr->neighbors[level].first;
                             if (curr == nullptr) {
                                 break;
                             } else {
-                                /*auto first_level_values = curr->values[0];
-                                if (level != 0 || (level == 0 &&
-                                            first_level_values.first != first_level_values.second)) {*/
                                 parallel_for(0, xor_sums.size(), [&](size_t ii) {
                                         parallel_for(0, xor_sums[ii].size(), [&](size_t ij) {
                                             xor_sums[ii][ij].first ^= curr->values[level][ii][ij].first;
                                             xor_sums[ii][ij].second ^= curr->values[level][ii][ij].second;
                                         });
                                 });
-                                //}
+
+                                old_size -= curr->size[level];
                             }
                         }
                     }
@@ -486,28 +486,26 @@ struct SkipList {
             });
 
             parallel_for(0, splits->size(), [&](size_t i) {
-                splits_ref[i]->update_level = UINT_E_MAX;
+                splits_ref[i]->update_level_xor = UINT_E_MAX;
+                splits_ref[i]->update_level_sum = UINT_E_MAX;
             });
             return results;
     }
 
-    // Get the sum of the entire sequence
-    sequence<sequence<std::pair<uintE, uintE>>> get_sum(SkipListElement* this_element) {
+    // Get the XOR of the entire sequence
+    sequence<sequence<std::pair<uintE, uintE>>> get_xor(SkipListElement* this_element) {
             SkipListElement* root = find_representative(this_element);
             size_t level = root->height-1;
             sequence<sequence<std::pair<uintE, uintE>>> xor_sums = root->values[level];
 
             SkipListElement* curr = root->neighbors[level].second;
             while (curr != nullptr && curr != root) {
-                /*auto first_level_values = curr->values[0];
-                if (level != 0 || (level == 0 && first_level_values.first != first_level_values.second)) {*/
                 parallel_for(0, xor_sums.size(), [&](size_t ii) {
                         parallel_for(0, xor_sums[ii].size(), [&](size_t ij) {
                             xor_sums[ii][ij].first ^= curr->values[level][ii][ij].first;
                             xor_sums[ii][ij].second ^= curr->values[level][ii][ij].second;
                         });
                 });
-                //}
                 curr = curr->neighbors[level].second;
             }
 
@@ -523,20 +521,47 @@ struct SkipList {
 
                             while(curr->neighbors[level].first != nullptr) {
                                 curr = curr->neighbors[level].first;
-                                /*auto first_level_values = curr->values[0];
-                                if (level != 0 || (level == 0
-                                            && first_level_values.first != first_level_values.second)) {*/
                                 parallel_for(0, xor_sums.size(), [&](size_t ii) {
                                         parallel_for(0, xor_sums[ii].size(), [&](size_t ij) {
                                             xor_sums[ii][ij].first ^= curr->values[level][ii][ij].first;
                                             xor_sums[ii][ij].second ^= curr->values[level][ii][ij].second;
                                         });
                                 });
-                                //}
                             }
                     }
             }
             return xor_sums;
+    }
+
+    // Get the SUM of the entire sequence
+    sequence<sequence<std::pair<uintE, uintE>>> get_sum(SkipListElement* this_element) {
+            SkipListElement* root = find_representative(this_element);
+            size_t level = root->height-1;
+            size_t sums = root->size[level];
+
+            SkipListElement* curr = root->neighbors[level].second;
+            while (curr != nullptr && curr != root) {
+                sums += curr->size[level];
+                curr = curr->neighbors[level].second;
+            }
+
+            if (curr == nullptr) { // the list is not circular
+                    curr = root;
+                    while(true) {
+                            while(level > 0 && curr->neighbors[level].first == nullptr) {
+                                    level--;
+                            }
+
+                            if(level == 0 && curr->neighbors[level].first == nullptr)
+                                break;
+
+                            while(curr->neighbors[level].first != nullptr) {
+                                curr = curr->neighbors[level].first;
+                                sums += curr->size[level];
+                            }
+                    }
+            }
+            return sums;
     }
 };
 
@@ -743,26 +768,26 @@ inline void RunSkipList(uintE n) {
         << std::endl;
 
     std::cout << "total sum subtree 1: "
-        << skip_list.get_sum(&skip_list_neighbors[0])[0][0].first
-        << skip_list.get_sum(&skip_list_neighbors[0])[0][0].second
+        << skip_list.get_xor(&skip_list_neighbors[0])[0][0].first
+        << skip_list.get_xor(&skip_list_neighbors[0])[0][0].second
         << "; "
-        << skip_list.get_sum(&skip_list_neighbors[1])[0][0].first << ", "
-        << skip_list.get_sum(&skip_list_neighbors[1])[0][0].second
+        << skip_list.get_xor(&skip_list_neighbors[1])[0][0].first << ", "
+        << skip_list.get_xor(&skip_list_neighbors[1])[0][0].second
         << "; "
-        << skip_list.get_sum(&skip_list_neighbors[2])[0][0].first << ", "
-        << skip_list.get_sum(&skip_list_neighbors[2])[0][0].second
+        << skip_list.get_xor(&skip_list_neighbors[2])[0][0].first << ", "
+        << skip_list.get_xor(&skip_list_neighbors[2])[0][0].second
         << std::endl;
 
     std::cout << "total sum subtree 2: "
-        << skip_list.get_sum(&skip_list_neighbors[3])[0][0].first << ", "
-        << skip_list.get_sum(&skip_list_neighbors[3])[0][0].second << "; "
-        << skip_list.get_sum(&skip_list_neighbors[4])[0][0].first << ", "
-        << skip_list.get_sum(&skip_list_neighbors[4])[0][0].second
+        << skip_list.get_xor(&skip_list_neighbors[3])[0][0].first << ", "
+        << skip_list.get_xor(&skip_list_neighbors[3])[0][0].second << "; "
+        << skip_list.get_xor(&skip_list_neighbors[4])[0][0].first << ", "
+        << skip_list.get_xor(&skip_list_neighbors[4])[0][0].second
         << std::endl;
 
     std::cout << "total sum subtree 3: "
-        << skip_list.get_sum(&skip_list_neighbors[5])[0][0].first << ", "
-        << skip_list.get_sum(&skip_list_neighbors[5])[0][0].second
+        << skip_list.get_xor(&skip_list_neighbors[5])[0][0].first << ", "
+        << skip_list.get_xor(&skip_list_neighbors[5])[0][0].second
         << std::endl;
 
     std::cout << "splitting some nodes" << std::endl;
@@ -787,17 +812,17 @@ inline void RunSkipList(uintE n) {
     std::cout << "representative node 6: " << skip_list.find_representative(&skip_list_neighbors[5])->values[0][0][0].second
         << std::endl;
 
-    std::cout << "total sum subtree 1: " << skip_list.get_sum(&skip_list_neighbors[0])[0][0].first << ", "
-        << skip_list.get_sum(&skip_list_neighbors[1])[0][0].first << std::endl;
+    std::cout << "total sum subtree 1: " << skip_list.get_xor(&skip_list_neighbors[0])[0][0].first << ", "
+        << skip_list.get_xor(&skip_list_neighbors[1])[0][0].first << std::endl;
 
-    std::cout << "total sum subtree 2: "  << skip_list.get_sum(&skip_list_neighbors[2])[0][0].first
+    std::cout << "total sum subtree 2: "  << skip_list.get_xor(&skip_list_neighbors[2])[0][0].first
         << std::endl;
 
-    std::cout << "total sum subtree 3: " << skip_list.get_sum(&skip_list_neighbors[3])[0][0].second << ", "
-        << skip_list.get_sum(&skip_list_neighbors[4])[0][0].second
+    std::cout << "total sum subtree 3: " << skip_list.get_xor(&skip_list_neighbors[3])[0][0].second << ", "
+        << skip_list.get_xor(&skip_list_neighbors[4])[0][0].second
         << std::endl;
 
-    std::cout << "total sum subtree 6: " << skip_list.get_sum(&skip_list_neighbors[5])[0][0].first << std::endl;
+    std::cout << "total sum subtree 6: " << skip_list.get_xor(&skip_list_neighbors[5])[0][0].first << std::endl;
 
     std::cout << "total sum 1, 2: " << skip_list.get_subsequence_sum(&skip_list_neighbors[0],
             &skip_list_neighbors[1])[0][0].first << std::endl;
@@ -825,13 +850,13 @@ inline void RunSkipList(uintE n) {
     std::cout << "representative node 6: " << skip_list.find_representative(&skip_list_neighbors[5])->values[0][0][0].first
         << std::endl;
 
-    std::cout << "total sum subtree 1: " << skip_list.get_sum(&skip_list_neighbors[0])[0][0].first << ", "
-        << skip_list.get_sum(&skip_list_neighbors[1])[0][0].first
-        << ", " << skip_list.get_sum(&skip_list_neighbors[2])[0][0].first
-        << ", " << skip_list.get_sum(&skip_list_neighbors[5])[0][0].first << std::endl;
+    std::cout << "total sum subtree 1: " << skip_list.get_xor(&skip_list_neighbors[0])[0][0].first << ", "
+        << skip_list.get_xor(&skip_list_neighbors[1])[0][0].first
+        << ", " << skip_list.get_xor(&skip_list_neighbors[2])[0][0].first
+        << ", " << skip_list.get_xor(&skip_list_neighbors[5])[0][0].first << std::endl;
 
-    std::cout << "total sum subtree 2: " << skip_list.get_sum(&skip_list_neighbors[3])[0][0].first << ", "
-        << skip_list.get_sum(&skip_list_neighbors[4])[0][0].first
+    std::cout << "total sum subtree 2: " << skip_list.get_xor(&skip_list_neighbors[3])[0][0].first << ", "
+        << skip_list.get_xor(&skip_list_neighbors[4])[0][0].first
         << std::endl;
 
 }
