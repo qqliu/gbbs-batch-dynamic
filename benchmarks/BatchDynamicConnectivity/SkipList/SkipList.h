@@ -313,7 +313,7 @@ struct SkipList {
         }
     }
 
-    /* Bottom-up update method */
+    /* Bottom-up update method for sizes */
     void batch_update_size(sequence<std::pair<SkipListElement*, size_t>>* new_values) {
         if (new_values != nullptr) {
             parallel_for(0, new_values.size(), [&](size_t i){
@@ -380,9 +380,37 @@ struct SkipList {
 
             auto total_size = parlay::scan_inplace(sizes);
             sequence<SkipListElement*> all_updated_elements = sequence<SkipListElement*>(total_size, nullptr);
+            parallel_for(0, sizes.size(), [&](size_t ll) {
+                parallel_for(0, elements[ll].size(), [&](size_t kk){
+                    all_updated_elements[sizes[ll]+kk] = elements[ll][kk];
+                });
+            });
 
-            // TODO: I am here.
-            batch_update(&join_rights);
+            parlay::integer_sort_inplace(parlay::make_slice(all_updated_elements));
+
+            // get unique elements
+            auto bool_seq = parlay::delayed_seq<bool>(all_updated_elements.size() + 1, [&] (size_t i) {
+                return (i == 0) || (i == all_updated_elements.size())
+                    || (all_updated_elements[i].first != all_updated_elements[i-1].first);
+            });
+
+            auto parent_starts = parlay::pack_index(bool_seq);
+
+            sequence<std::pair<SkipListElement*, sequence<sequence<std::pair<uintE, uintE>>>>>
+                unique_updated_elements = sequence<std::pair<SkipListElement*, sequence<sequence<
+                std::pair<uintE, uintE>>>>>(parent_starts.size() - 1);
+            sequence<std::pair<SkipListElement*, size_t>> unique_sizes_update =
+               sequene<std::pair<SkipListElement*, size_t>>(parent_starts.size() - 1);
+            parallel_for(0, parent_starts.size()-1, [&](size_t ll){
+                auto element = all_updated_elements[parent_starts[ll]];
+                unique_updated_elements[i] = std::make_pair(element,
+                        element->values[0]);
+                unique_sizes_update[i] = std::make_pair(element, element->size[0]);
+            });
+
+
+            batch_update_xor(&unique_updated_elements);
+            batch_update_sum(&unique_sizes_update);
     }
 
     sequence<SkipListElement*> batch_split(sequence<SkipListElement*>* splits) {
@@ -431,8 +459,6 @@ struct SkipList {
             });
             return results;
     }
-
-    // TODO: get size function using the new size attribute
 
     // Get the sum of the entire sequence
     sequence<sequence<std::pair<uintE, uintE>>> get_sum(SkipListElement* this_element) {
