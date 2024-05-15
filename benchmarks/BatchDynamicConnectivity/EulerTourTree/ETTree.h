@@ -50,8 +50,8 @@ struct ETTree {
 
     template <class KY, class VL, class HH>
     void link(uintE u, uintE v, gbbs::sparse_table<KY, VL, HH> edge_index_table) {
-        auto index_uv = edge_index_table.find(std::make_pair(u, v), UINT_E_MAX); //, UINT_E_MAX);
-        auto index_vu = edge_index_table.find(std::make_pair(v, u), UINT_E_MAX); //, UINT_E_MAX);
+        auto index_uv = edge_index_table.find(std::make_pair(u, v), UINT_E_MAX);
+        auto index_vu = edge_index_table.find(std::make_pair(v, u), UINT_E_MAX);
 
         if (index_uv == UINT_E_MAX || index_vu == UINT_E_MAX)
             std::cout << "THERE IS AN ERROR in edge_index_table" << std::endl;
