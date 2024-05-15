@@ -9,14 +9,6 @@
 
 namespace gbbs {
 
-  uintE hash_function_parlay(std::tuple<uintE, uintE>& t) {
-            size_t l = std::get<0>(t);
-            size_t r = std::get<1>(t);
-            size_t key = (l << 32) + r;
-
-            return parlay::hash64_2(key);
-  }
-
 sequence<sequence<std::pair<uintE, uintE>>> make_values(uintE a, uintE b, double pb, int copies, size_t m) {
         return sequence<sequence<std::pair<uintE, uintE>>>(copies, sequence<std::pair<uintE, uintE>>(
                     ceil(log(m)/log(pb)), std::make_pair(a, b)));
