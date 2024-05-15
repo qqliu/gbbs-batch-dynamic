@@ -67,6 +67,7 @@ struct SkipList {
                 probability_base = pb;
                 num_duplicates = num_dup;
 
+                size[0] = 1;
                 parallel_for(1, _h, [&](size_t i){
                     values[i] = sequence<sequence<std::pair<uintE, uintE>>>(num_duplicates,
                             sequence<std::pair<uintE, uintE>>(ceil(log(m)/log(pb)), std::make_pair(0, 0)));
@@ -168,8 +169,7 @@ struct SkipList {
 
         size_t current_level = cur_element->height - 1;
 
-        while(cur_element->neighbors[current_level].second != nullptr &&
-                seen_element != cur_element) {
+        while(seen_element != cur_element) {
                 if (seen_element == nullptr || cur_element < seen_element)
                     seen_element = cur_element;
                 cur_element = cur_element->neighbors[current_level].second;
@@ -180,16 +180,7 @@ struct SkipList {
                 }
         }
 
-        if (seen_element == cur_element) {
-                return seen_element;
-        } else {
-        // skiplist is not cyclic so find the leftmost element
-                while (cur_element->neighbors[current_level].first != nullptr) {
-                        cur_element = cur_element->neighbors[current_level].first;
-                        current_level = cur_element->height - 1;
-                }
-                return cur_element;
-        }
+        return seen_element;
     }
 
     void join(SkipListElement* left, SkipListElement* right) {
@@ -261,7 +252,7 @@ struct SkipList {
             sequence<sequence<std::pair<uintE, uintE>>> xor_total = this_element->values[level-1];
             SkipListElement* curr = this_element->neighbors[level-1].second;
             // only update if neighbor has height at most current level
-            while (curr != nullptr && curr->height < level) {
+            while (curr != nullptr && curr->height < level + 1) {
                     if (curr->update_level_xor != UINT_E_MAX && curr->update_level_xor < level) {
                             update_top_down_xor(level-1, curr);
                     }
@@ -299,7 +290,7 @@ struct SkipList {
             size_t sum_total = this_element->size[level-1];
             SkipListElement* curr = this_element->neighbors[level-1].second;
             // only update if neighbor has height at most current level
-            while (curr != nullptr && curr->height < level) {
+            while (curr != nullptr && curr->height < level + 1) {
                     if (curr->update_level_sum != UINT_E_MAX && curr->update_level_sum < level) {
                             update_top_down_sum(level-1, curr);
                     }
@@ -307,7 +298,9 @@ struct SkipList {
                     sum_total += curr->size[level-1];
                     curr = curr->neighbors[level-1].second;
             }
-            this_element->size[level] = sum_total;
+
+            auto old_size = this_element->size[level];
+            gbbs::atomic_compare_and_swap(&this_element->size[level], old_size, sum_total);
 
             if(this_element->height == level+1) {
                     this_element->update_level_sum = UINT_E_MAX;
@@ -404,7 +397,6 @@ struct SkipList {
                                             (uintE)level))
                                     c = curr->update_level_sum;
                             }
-                            top_nodes[i] = nullptr;
                             break;
                         }
                     }
@@ -499,27 +491,6 @@ struct SkipList {
                 curr = curr->neighbors[level].second;
             }
 
-            if (curr == nullptr) { // the list is not circular
-                    curr = root;
-                    while(true) {
-                            while(level > 0 && curr->neighbors[level].first == nullptr) {
-                                    level--;
-                            }
-
-                            if(level == 0 && curr->neighbors[level].first == nullptr)
-                                break;
-
-                            while(curr->neighbors[level].first != nullptr) {
-                                curr = curr->neighbors[level].first;
-                                parallel_for(0, xor_sums.size(), [&](size_t ii) {
-                                        parallel_for(0, xor_sums[ii].size(), [&](size_t ij) {
-                                            xor_sums[ii][ij].first ^= curr->values[level][ii][ij].first;
-                                            xor_sums[ii][ij].second ^= curr->values[level][ii][ij].second;
-                                        });
-                                });
-                            }
-                    }
-            }
             return xor_sums;
     }
 
@@ -535,22 +506,6 @@ struct SkipList {
                 curr = curr->neighbors[level].second;
             }
 
-            if (curr == nullptr) { // the list is not circular
-                    curr = root;
-                    while(true) {
-                            while(level > 0 && curr->neighbors[level].first == nullptr) {
-                                    level--;
-                            }
-
-                            if(level == 0 && curr->neighbors[level].first == nullptr)
-                                break;
-
-                            while(curr->neighbors[level].first != nullptr) {
-                                curr = curr->neighbors[level].first;
-                                sums += curr->size[level];
-                            }
-                    }
-            }
             return sums;
     }
 };
@@ -568,27 +523,28 @@ inline void RunSkipList(uintE n) {
     sequence<SkipList::SkipListElement> skip_list_neighbors = sequence<SkipList::SkipListElement>(10);
 
     std::cout << "creating nodes" << std::endl;
-    auto curr_node = skip_list.create_node(2, nullptr, nullptr, default_values(2, 2));
+    auto curr_node = skip_list.create_node(2, nullptr, nullptr, default_values(2, 22));
     std::cout << "created first node" << std::endl;
 
     skip_list_neighbors[1] = curr_node;
-    auto curr_node2 = skip_list.create_node(3, nullptr, nullptr, default_values(3, 3));
+    auto curr_node2 = skip_list.create_node(3, nullptr, nullptr, default_values(3, 33));
     skip_list_neighbors[2] = curr_node2;
-    skip_list_neighbors[0] = skip_list.create_node(1, nullptr, nullptr, default_values(1, 1));
-    skip_list_neighbors[3] = skip_list.create_node(4, nullptr, nullptr, default_values(4, 4));
-    skip_list_neighbors[4] = skip_list.create_node(5, nullptr, nullptr, default_values(5, 5));
-    skip_list_neighbors[5] = skip_list.create_node(6, nullptr, nullptr, default_values(6, 6));
+    skip_list_neighbors[0] = skip_list.create_node(1, nullptr, nullptr, default_values(1, 11));
+    skip_list_neighbors[3] = skip_list.create_node(4, nullptr, nullptr, default_values(4, 44));
+    skip_list_neighbors[4] = skip_list.create_node(5, nullptr, nullptr, default_values(5, 55));
+    skip_list_neighbors[5] = skip_list.create_node(6, nullptr, nullptr, default_values(6, 66));
 
     std::cout << "created nodes" << std::endl;
 
     std::cout << "joining nodes" << std::endl;
     sequence<std::pair<SkipList::SkipListElement*, SkipList::SkipListElement*>> join_updates
-        = sequence<std::pair<SkipList::SkipListElement*, SkipList::SkipListElement*>>(5);
+        = sequence<std::pair<SkipList::SkipListElement*, SkipList::SkipListElement*>>(6);
     join_updates[0] = std::make_pair(&skip_list_neighbors[1], &skip_list_neighbors[2]);
     join_updates[1] = std::make_pair(&skip_list_neighbors[0], &skip_list_neighbors[1]);
     join_updates[2] = std::make_pair(&skip_list_neighbors[2], &skip_list_neighbors[0]);
     join_updates[3] = std::make_pair(&skip_list_neighbors[3], &skip_list_neighbors[4]);
     join_updates[4] = std::make_pair(&skip_list_neighbors[4], &skip_list_neighbors[3]);
+    join_updates[5] = std::make_pair(&skip_list_neighbors[5], &skip_list_neighbors[5]);
     skip_list.batch_join(&join_updates);
 
     std::cout << "printing answers" << std::endl;
@@ -605,6 +561,14 @@ inline void RunSkipList(uintE n) {
     std::cout << "node 3 value: " << skip_list_neighbors[2].values[0][0][0].first << ", " <<
        skip_list_neighbors[2].values[0][0][0].second << std::endl;
 
+    if (skip_list_neighbors[0].neighbors[0].first != nullptr)
+        std::cout << "node 1 left: " <<
+            skip_list_neighbors[0].neighbors[0].first -> values[0][0][0].first <<
+            skip_list_neighbors[0].neighbors[0].first -> values[0][0][0].second << std::endl;
+    if (skip_list_neighbors[0].neighbors[0].second != nullptr)
+        std::cout << "node 1 right: " <<
+            skip_list_neighbors[0].neighbors[0].second -> values[0][0][0].first <<
+            skip_list_neighbors[0].neighbors[0].second -> values[0][0][0].second << std::endl;
     if (skip_list_neighbors[1].neighbors[0].first != nullptr)
         std::cout << "node 2 left: " <<
             skip_list_neighbors[1].neighbors[0].first -> values[0][0][0].first <<
@@ -633,7 +597,7 @@ inline void RunSkipList(uintE n) {
     if (skip_list_neighbors[0].neighbors[node_1_height].first != nullptr) {
        std::cout << "node 1 left pointer" << std::endl;
        auto left_neighbor = skip_list_neighbors[0].neighbors[node_1_height].first;
-       std::cout << "node 1 height left: " <<
+       std::cout << "node 1 values left: " <<
            skip_list_neighbors[0].neighbors[node_1_height].first -> values[left_neighbor->height - 1][0][0].first <<
            skip_list_neighbors[0].neighbors[node_1_height].first -> values[left_neighbor->height - 1][0][0].second
            << std::endl;
@@ -641,7 +605,7 @@ inline void RunSkipList(uintE n) {
 
     if (skip_list_neighbors[0].neighbors[node_1_height].second != nullptr) {
        auto right_neighbor = skip_list_neighbors[0].neighbors[node_1_height].second;
-       std::cout << "node 1 height right: " <<
+       std::cout << "node 1 values right: " <<
            skip_list_neighbors[0].neighbors[node_1_height].second -> values[right_neighbor->height - 1][0][0].first <<
            skip_list_neighbors[0].neighbors[node_1_height].second -> values[right_neighbor->height - 1][0][0].second
            << std::endl;
@@ -651,7 +615,7 @@ inline void RunSkipList(uintE n) {
 
     if (skip_list_neighbors[1].neighbors[node_2_height].first != nullptr) {
        auto left_neighbor = skip_list_neighbors[1].neighbors[node_2_height].first;
-       std::cout << "node 2 height left: " <<
+       std::cout << "node 2 values left: " <<
            skip_list_neighbors[1].neighbors[node_2_height].first -> values[left_neighbor->height - 1][0][0].first <<
            skip_list_neighbors[1].neighbors[node_2_height].first -> values[left_neighbor->height - 1][0][0].second
            << std::endl;
@@ -730,8 +694,8 @@ inline void RunSkipList(uintE n) {
     std::cout << "representative node 6: " << skip_list.find_representative(&skip_list_neighbors[5])->values[0][0][0].first
         << std::endl;
 
-    std::cout << "total sum subtree 1: "
-        << skip_list.get_xor(&skip_list_neighbors[0])[0][0].first
+    std::cout << "total xor subtree 1: "
+        << skip_list.get_xor(&skip_list_neighbors[0])[0][0].first << ", "
         << skip_list.get_xor(&skip_list_neighbors[0])[0][0].second
         << "; "
         << skip_list.get_xor(&skip_list_neighbors[1])[0][0].first << ", "
