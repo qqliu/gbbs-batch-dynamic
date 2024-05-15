@@ -89,7 +89,7 @@ struct ETTree {
 
     template <class KY, class VL, class HH>
     void cut(int u, int v, gbbs::sparse_table<KY, VL, HH> edge_index_table){
-            auto index_uv = edge_index_table.find(std::make_pair(u, v), UINT_E_MAX); //, UINT_E_MAX);
+            auto index_uv = edge_index_table.find(std::make_pair(u, v), UINT_E_MAX);
             if (index_uv == UINT_E_MAX)
                 std::cout << "There is an error in edge_index_table" << std::endl;
 
@@ -131,10 +131,7 @@ struct ETTree {
     void batch_link_sequential(sequence<std::pair<uintE, uintE>>links,
             gbbs::sparse_table<KY, VL, HH> edge_index_table) {
             for(size_t i = 0; i < links.size(); i++) {
-                    std::cout << "u: " << links[i].first << ", "
-                        << "v: " << links[i].second << std::endl;
-
-                    link(links[i].first, links[i].second, edge_index_table);
+                link(links[i].first, links[i].second, edge_index_table);
             }
     }
 
