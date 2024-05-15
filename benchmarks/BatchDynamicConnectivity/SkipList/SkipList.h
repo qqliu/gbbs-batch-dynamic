@@ -169,7 +169,8 @@ struct SkipList {
 
         size_t current_level = cur_element->height - 1;
 
-        while(seen_element != cur_element) {
+        while(cur_element->neighbors[current_level].second != nullptr &&
+                seen_element != cur_element) {
                 if (seen_element == nullptr || cur_element < seen_element)
                     seen_element = cur_element;
                 cur_element = cur_element->neighbors[current_level].second;
@@ -180,7 +181,16 @@ struct SkipList {
                 }
         }
 
-        return seen_element;
+        if (seen_element == cur_element) {
+                return seen_element;
+        } else {
+                // skiplist is not cyclic so find the leftmost element
+                while (cur_element->neighbors[current_level].first != nullptr) {
+                        cur_element = cur_element->neighbors[current_level].first;
+                        current_level = cur_element->height - 1;
+                }
+                return cur_element;
+        }
     }
 
     void join(SkipListElement* left, SkipListElement* right) {
@@ -491,6 +501,28 @@ struct SkipList {
                 curr = curr->neighbors[level].second;
             }
 
+
+            if (curr == nullptr) { // the list is not circular
+                    curr = root;
+                    while(true) {
+                            while(level > 0 && curr->neighbors[level].first == nullptr) {
+                                    level--;
+                            }
+
+                            if(level == 0 && curr->neighbors[level].first == nullptr)
+                                break;
+
+                            while(curr->neighbors[level].first != nullptr) {
+                                curr = curr->neighbors[level].first;
+                                parallel_for(0, xor_sums.size(), [&](size_t ii) {
+                                        parallel_for(0, xor_sums[ii].size(), [&](size_t ij) {
+                                            xor_sums[ii][ij].first ^= curr->values[level][ii][ij].first;
+                                            xor_sums[ii][ij].second ^= curr->values[level][ii][ij].second;
+                                        });
+                                });
+                            }
+                    }
+            }
             return xor_sums;
     }
 
@@ -504,6 +536,23 @@ struct SkipList {
             while (curr != nullptr && curr != root) {
                 sums += curr->size[level];
                 curr = curr->neighbors[level].second;
+            }
+
+            if (curr == nullptr) { // the list is not circular
+                    curr = root;
+                    while(true) {
+                            while(level > 0 && curr->neighbors[level].first == nullptr) {
+                                    level--;
+                            }
+
+                            if(level == 0 && curr->neighbors[level].first == nullptr)
+                                break;
+
+                            while(curr->neighbors[level].first != nullptr) {
+                                curr = curr->neighbors[level].first;
+                                sums += curr->size[level];
+                            }
+                    }
             }
 
             return sums;
@@ -811,6 +860,11 @@ inline void RunSkipList(uintE n) {
         << ", " << skip_list.get_xor(&skip_list_neighbors[2])[0][0].first
         << ", " << skip_list.get_xor(&skip_list_neighbors[5])[0][0].first << std::endl;
 
+    std::cout << "total XOR subtree 2: " << skip_list.get_xor(&skip_list_neighbors[0])[0][0].second << ", "
+        << skip_list.get_xor(&skip_list_neighbors[1])[0][0].second
+        << ", " << skip_list.get_xor(&skip_list_neighbors[2])[0][0].second
+        << ", " << skip_list.get_xor(&skip_list_neighbors[5])[0][0].second << std::endl;
+
     std::cout << "total size subtree 1: " << skip_list.get_sum(&skip_list_neighbors[0]) << ", "
         << skip_list.get_sum(&skip_list_neighbors[1])
         << ", " << skip_list.get_sum(&skip_list_neighbors[2])
@@ -819,6 +873,11 @@ inline void RunSkipList(uintE n) {
     std::cout << "total sum subtree 2: " << skip_list.get_xor(&skip_list_neighbors[3])[0][0].first << ", "
         << skip_list.get_xor(&skip_list_neighbors[4])[0][0].first
         << std::endl;
+
+    std::cout << "total XOR subtree 2: " << skip_list.get_xor(&skip_list_neighbors[3])[0][0].second << ", "
+        << skip_list.get_xor(&skip_list_neighbors[4])[0][0].second
+        << std::endl;
+
     std::cout << "total size subtree 2: " << skip_list.get_sum(&skip_list_neighbors[3]) << ", "
         << skip_list.get_sum(&skip_list_neighbors[4])
         << std::endl;
