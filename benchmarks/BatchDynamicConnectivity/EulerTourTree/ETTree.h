@@ -201,8 +201,10 @@ struct ETTree {
             split_successors[split_index] = results[i];
         });
 
-        // why is it multiplied by 4?
-        auto joins = sequence<std::pair<SkipList::SkipListElement*, SkipList::SkipListElement*>>(4 * links.size(),
+        // If x has new neighbors y_1, y_2, ..., y_k, join (x, x) to (x, y_1). Join
+        // (y_i,x) to (x, y_{i+1}) for each i < k. Join (y_k, x) to succ(x)
+
+        auto joins = sequence<std::pair<SkipList::SkipListElement*, SkipList::SkipListElement*>>(2 * links.size(),
                 std::make_pair(nullptr, nullptr));
         parallel_for(0, 2 * links.size(), [&] (size_t i) {
             uintE u, v;
@@ -220,8 +222,6 @@ struct ETTree {
                 joins[2*i] = std::make_pair(&vertices[u], uv);
             }
 
-            // uv and vu are never joined together
-
             if (i == 2 * links.size() - 1 || u != links_both_dirs[i+1].first) {
                 joins[2*i + 1] = std::make_pair(vu, split_successors[i]);
                 if (split_successors[i] == nullptr)
@@ -234,7 +234,6 @@ struct ETTree {
                 if (index_uv2 == UINT_E_MAX)
                     std::cout << "This is an error in edge_index_table in recursive insertions uv2" << std::endl;
 
-
                 auto found_element = &edge_table[index_uv2];
                 joins[2*i + 1] = std::make_pair(vu, found_element);
             }
@@ -243,6 +242,8 @@ struct ETTree {
         sequence<std::pair<SkipList::SkipListElement*, SkipList::SkipListElement*>> filtered =
             parlay::filter(joins, [&] (const std::pair<SkipList::SkipListElement*, SkipList::SkipListElement*>& e) {
 
+                if ((e.first == nullptr && e.second != nullptr) || (e.first != nullptr && e.second != nullptr))
+                    std::cout << "ERROR: join error nullptr" << std::endl;
                 return e.first != nullptr && e.second != nullptr;
             });
 
