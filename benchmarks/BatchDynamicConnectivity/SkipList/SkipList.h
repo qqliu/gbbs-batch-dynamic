@@ -67,12 +67,12 @@ struct SkipList {
                 probability_base = pb;
                 num_duplicates = num_dup;
 
-                size[0] = 1;
+                size[0] = size_;
                 parallel_for(1, _h, [&](size_t i){
                     values[i] = sequence<sequence<std::pair<uintE, uintE>>>(num_duplicates,
                             sequence<std::pair<uintE, uintE>>(ceil(log(m)/log(pb)), std::make_pair(0, 0)));
 
-                    size[i] = 1;
+                    size[i] = size_;
                 });
         }
 
@@ -114,7 +114,7 @@ struct SkipList {
             sequence<sequence<std::pair<uintE, uintE>>> vals,
             SkipListElement* twin = nullptr, bool is_vertex = false,
             std::pair<uintE, uintE> id = std::make_pair(UINT_E_MAX, UINT_E_MAX),
-            double pb = 2, int num_dup = 2, size_t m = 10) {
+            double pb = 2, int num_dup = 2, size_t m = 10, uintE value = 1) {
         rng.fork(index);
         rng = rng.next();
         auto rand_val = rng.rand() % UINT_E_MAX;
@@ -128,7 +128,7 @@ struct SkipList {
 
         auto height = std::min(cur_height, (size_t) 32);
 
-        auto node = SkipListElement(height, left, right, vals, twin, is_vertex, id, pb, num_dup, m);
+        auto node = SkipListElement(height, left, right, vals, twin, is_vertex, id, pb, num_dup, m, value);
         return node;
     }
 

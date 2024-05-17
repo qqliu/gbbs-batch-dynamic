@@ -36,7 +36,7 @@ struct ETTree {
         auto joins = sequence<std::pair<SkipList::SkipListElement*, SkipList::SkipListElement*>>(n);
         parallel_for(0, n, [&] (size_t i) {
             vertices[i] = skip_list.create_node(i, nullptr, nullptr, make_values(0, 0, pb, copies, m), nullptr, true,
-                    std::make_pair(i, i), pb, copies, m);
+                    std::make_pair(i, i), pb, copies, m, 1);
             joins[i] = std::make_pair(&vertices[i], &vertices[i]);
         });
 
@@ -57,10 +57,10 @@ struct ETTree {
             std::cout << "THERE IS AN ERROR in edge_index_table" << std::endl;
 
         edge_table[index_uv] = skip_list.create_node(u, nullptr, nullptr, make_values(0, 0, pb, copies, m), nullptr, false,
-                std::make_pair(u, v), pb, copies, m);
+                std::make_pair(u, v), pb, copies, m, 0);
         auto uv = &edge_table[index_uv];
         edge_table[index_vu] = skip_list.create_node(v, nullptr, nullptr, make_values(0, 0, pb, copies, m), uv, false,
-                std::make_pair(v, u), pb, copies, m);
+                std::make_pair(v, u), pb, copies, m, 0);
         auto vu = &edge_table[index_vu];
         uv->twin = vu;
         vu->twin = uv;
@@ -169,7 +169,7 @@ struct ETTree {
                         std::cout << "This is an error in edge_index_table in recursive insertions" << std::endl;
 
                     edge_table[index_uv] = skip_list.create_node(u, nullptr, nullptr, make_values(0, 0, pb, copies, m),
-                            nullptr, false, std::make_pair(u, v), pb, copies, m);
+                            nullptr, false, std::make_pair(u, v), pb, copies, m, 0);
                     auto uv = &edge_table[index_uv];
 
                     auto index_vu = edge_index_table.find(std::make_pair(v, u), UINT_E_MAX);
@@ -177,7 +177,7 @@ struct ETTree {
                         std::cout << "This is an error in edge_index_table in recursive insertions" << std::endl;
 
                     edge_table[index_vu] = skip_list.create_node(v, nullptr, nullptr, make_values(0, 0, pb, copies, m),
-                            uv, false, std::make_pair(v, u), pb, copies, m);
+                            uv, false, std::make_pair(v, u), pb, copies, m, 0);
                     auto vu = &edge_table[index_vu];
                     vu->twin = uv;
                     uv->twin = vu;
@@ -284,7 +284,7 @@ struct ETTree {
                     u = cuts[i].first;
                     v = cuts[i].second;
 
-                    auto index_uv = edge_index_table.find(std::make_pair(u, v), UINT_E_MAX); //, UINT_E_MAX);
+                    auto index_uv = edge_index_table.find(std::make_pair(u, v), UINT_E_MAX);
                     if (index_uv == UINT_E_MAX)
                         std::cout << "This is an error in edge_index_table in batch deletions" << std::endl;
 
@@ -367,12 +367,12 @@ struct ETTree {
                         u = cuts[i].first;
                         v = cuts[i].second;
 
-                        auto index_uv = edge_index_table.find(std::make_pair(u, v), UINT_E_MAX); //, UINT_E_MAX);
+                        auto index_uv = edge_index_table.find(std::make_pair(u, v), UINT_E_MAX);
                         if (index_uv == UINT_E_MAX)
                             std::cout << "This is an error in edge_index_table in batch deletions" << std::endl;
 
                         edge_table[index_uv] = SkipList::SkipListElement();
-                        auto index_vu = edge_index_table.find(std::make_pair(v, u), UINT_E_MAX); //, UINT_E_MAX);
+                        auto index_vu = edge_index_table.find(std::make_pair(v, u), UINT_E_MAX);
                         if (index_vu == UINT_E_MAX)
                             std::cout << "This is an error in edge_index_table in batch deletions" << std::endl;
 
@@ -413,6 +413,7 @@ struct ETTree {
             batch_cut_recurse(cuts, edge_index_table);
     }
 
+    // Dynamic connectivity specific method
     void add_edge_to_cutsets(std::pair<uintE, uintE> edge) {
         auto min_edge = std::min(edge.first, edge.second);
         auto max_edge = std::max(edge.first, edge.second);
@@ -423,8 +424,10 @@ struct ETTree {
                     cutset_rng.fork(edge.first + ii * ij);
                     cutset_rng = cutset_rng.next();
                     auto base = uintE(floor(pow(pb, ij)));
-                    if (base == 1)
-                        base = pb;
+
+                    if (base < 1)
+                        base = 1;
+
                     auto rand_val_u = cutset_rng.rand() % base;
                     if (rand_val_u <= 0)
                         u->values[0][ii][ij] = std::make_pair(u->values[0][ii][ij].first ^ min_edge,
@@ -435,9 +438,15 @@ struct ETTree {
         });
     }
 
-    sequence<sequence<std::pair<uintE, uintE>>> get_tree_sum(uintE v) {
+    sequence<sequence<std::pair<uintE, uintE>>> get_tree_xor(uintE v) {
         auto edge = &vertices[v];
         auto edge_sum = skip_list.get_xor(edge);
+        return edge_sum;
+    }
+
+    size_t get_tree_size(uintE v) {
+        auto edge = &vertices[v];
+        auto edge_sum = skip_list.get_sum(edge);
         return edge_sum;
     }
 
@@ -506,13 +515,34 @@ void RunETTree(double pb, int copies, size_t m) {
         std::cout << "Connected 1, 8: " << tree.is_connected(1, 8) << std::endl;
         std::cout << "Connected 1, 5: " << tree.is_connected(1, 5) << std::endl;
         std::cout << "Connected 5, 9: " << tree.is_connected(5, 9) << std::endl;
+        std::cout << "Connected 3, 6: " << tree.is_connected(3, 6) << std::endl;
 
         std::cout << "Getting subsequence sums: " << std::endl;
-        auto c = tree.get_tree_sum(2);
-        auto d = tree.get_tree_sum(5);
+        auto a = tree.get_tree_size(2);
+        auto b = tree.get_tree_size(5);
+        auto c = tree.get_tree_xor(2);
+        auto e = tree.get_tree_size(3);
+        auto f = tree.get_tree_size(9);
+        auto d = tree.get_tree_xor(5);
 
+        std::cout << "v: 2, size: " << a << ", " << "v: 5, size: " << b << ", " << "v: 3, size: " <<
+            e << ", " << "v: 9, size: " << f << std::endl;
         std::cout << "v: 2, parent: 2: " << c[0][0].first << ", " << c[0][0].second << std::endl;
         std::cout << "v: 5, parent: 5: " << d[0][0].first << ", " << d[0][0].second << std::endl;
+
+        tree.add_edge_to_cutsets(std::make_pair(1, 6));
+        tree.add_edge_to_cutsets(std::make_pair(6, 1));
+        tree.add_edge_to_cutsets(std::make_pair(1, 9));
+
+        std::cout << "v: 1, value: " << tree.vertices[1].values[0][0][0].first << ", "
+            << tree.vertices[1].values[0][0][0].second
+            << std::endl;
+        std::cout << "v: 6, value: " << tree.vertices[6].values[0][0][0].first << ", "
+            << tree.vertices[6].values[0][0][0].second
+            << std::endl;
+        std::cout << "v: 9, value: " << tree.vertices[9].values[0][0][0].first << ", "
+            << tree.vertices[9].values[0][0][0].second
+            << std::endl;
 
         sequence<std::pair<uintE, uintE>> cuts = sequence<std::pair<uintE, uintE>>(4);
         cuts[0] = std::make_pair(0, 8);
