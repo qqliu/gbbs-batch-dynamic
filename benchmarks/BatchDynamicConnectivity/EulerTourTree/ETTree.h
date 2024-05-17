@@ -164,7 +164,7 @@ struct ETTree {
             }
 
             if (u < v) {
-                    auto index_uv = edge_index_table.find(std::make_pair(u, v), UINT_E_MAX); //, UINT_E_MAX);
+                    auto index_uv = edge_index_table.find(std::make_pair(u, v), UINT_E_MAX);
                     if (index_uv == UINT_E_MAX)
                         std::cout << "This is an error in edge_index_table in recursive insertions" << std::endl;
 
@@ -172,7 +172,7 @@ struct ETTree {
                             nullptr, false, std::make_pair(u, v), pb, copies, m);
                     auto uv = &edge_table[index_uv];
 
-                    auto index_vu = edge_index_table.find(std::make_pair(v, u), UINT_E_MAX); //, UINT_E_MAX);
+                    auto index_vu = edge_index_table.find(std::make_pair(v, u), UINT_E_MAX);
                     if (index_vu == UINT_E_MAX)
                         std::cout << "This is an error in edge_index_table in recursive insertions" << std::endl;
 
@@ -201,6 +201,7 @@ struct ETTree {
             split_successors[split_index] = results[i];
         });
 
+        // why is it multiplied by 4?
         auto joins = sequence<std::pair<SkipList::SkipListElement*, SkipList::SkipListElement*>>(4 * links.size(),
                 std::make_pair(nullptr, nullptr));
         parallel_for(0, 2 * links.size(), [&] (size_t i) {
@@ -219,8 +220,12 @@ struct ETTree {
                 joins[2*i] = std::make_pair(&vertices[u], uv);
             }
 
+            // uv and vu are never joined together
+
             if (i == 2 * links.size() - 1 || u != links_both_dirs[i+1].first) {
                 joins[2*i + 1] = std::make_pair(vu, split_successors[i]);
+                if (split_successors[i] == nullptr)
+                    std::cout << "ERROR: wrong successor" << std::endl;
             } else {
                 uintE u2, v2;
                 u2 = links_both_dirs[i+1].first;
