@@ -183,6 +183,14 @@ struct Connectivity {
         tree = ETTree(n_, copies_, m_, pb_);
     }
 
+    // initialize edgemap for SkipListElement data structures
+    template <class Seq, class KY, class VL, class HH>
+    void initialize_data_structures(const Seq& all_edges, gbbs::sparse_table<KY, VL, HH> edge_table) {
+        parallel_for(0, all_edges.size(), [&](size_t i){
+            edge_table.insert_check()
+        });
+    }
+
     template <class Seq, class KY, class VL, class HH>
     void batch_insertion(const Seq& insertions, gbbs::sparse_table<KY, VL, HH> edge_table) {
         auto non_empty_spanning_tree = true;
