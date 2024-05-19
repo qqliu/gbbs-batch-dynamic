@@ -4,7 +4,7 @@
 
 #include "gbbs/gbbs.h"
 #include "gbbs/dynamic_graph_io.h"
-#include "gbbs/pbbslib/sparse_table.h"
+#include "gbbs/helpers/sparse_table.h"
 #include "benchmarks/KCore/JulienneDBS17/KCore.h"
 #include "benchmarks/BatchDynamicConnectivity/EulerTourTree/ETTree.h"
 
@@ -114,7 +114,7 @@ sequence<edge_mst_type> parallel_spanning_forest(sequence<edge_mst_type> edges, 
     };
 
     auto root_edge_to_original =
-         pbbslib::make_sparse_table<K, V>(roots.size(), empty, hash_pair);
+         gbbs::make_sparse_table<K, V>(roots.size(), empty, hash_pair);
 
     parallel_for(0, roots.size(), [&](size_t i){
         auto edge = roots[i];
@@ -184,7 +184,7 @@ struct Connectivity {
     }
 
     template <class Seq, class KY, class VL, class HH>
-    void batch_insertion(const Seq& insertions, pbbslib::sparse_table<KY, VL, HH> edge_table) {
+    void batch_insertion(const Seq& insertions, gbbs::sparse_table<KY, VL, HH> edge_table) {
         auto non_empty_spanning_tree = true;
         auto first = true;
         sequence<std::pair<uintE, uintE>> edges_both_directions = sequence<std::pair<uintE, uintE>>(0);
@@ -250,7 +250,7 @@ struct Connectivity {
                         tree.skip_list.find_representative(our_vertex);
                     update_seq[i] = std::make_pair(our_vertex, our_vertex->values[0]);
                 });
-                tree.skip_list.batch_update(&update_seq);
+                tree.skip_list.batch_update_xor(&update_seq);
             }
             first = false;
             if (!first) {
@@ -275,7 +275,7 @@ struct Connectivity {
 
             parallel_for(0, representative_nodes.size(), [&](size_t i) {
                 auto id = representative_nodes[i]->id.first;
-                auto sum = tree.get_tree_sum(id);
+                auto sum = tree.get_tree_xor(id);
                 bool is_present = false;
                 bool is_real_edge = false;
 
@@ -371,7 +371,7 @@ struct Connectivity {
                 return parlay::hash64_2(key);
             };
             auto representative_edge_to_original =
-                pbbslib::make_sparse_table<K, V>(unique_representative_edges.size(), empty, hash_pair);
+                gbbs::make_sparse_table<K, V>(unique_representative_edges.size(), empty, hash_pair);
 
             parallel_for(0, unique_representative_edges.size(), [&](size_t i){
                 auto edge = unique_representative_edges[i];
@@ -423,7 +423,7 @@ struct Connectivity {
             });
             auto starts1 = parlay::pack_index(bool_seq1);
             std::cout << "starts size " << starts1.size() << ": ";
-            for (int i = 0; i < starts1.size(); i++)
+            for (size_t i = 0; i < starts1.size(); i++)
                 std::cout << starts1[i];
             std::cout << std::endl;
             auto unique_original_edges = sequence<std::pair<uintE, uintE>>(starts1.size()-1);
@@ -448,7 +448,7 @@ struct Connectivity {
     }
 
     template <class Seq, class KY, class VL, class HH>
-    void batch_deletion(const Seq& deletions, pbbslib::sparse_table<KY, VL, HH> edge_table) {
+    void batch_deletion(const Seq& deletions, gbbs::sparse_table<KY, VL, HH> edge_table) {
     }
 };
 
@@ -474,7 +474,7 @@ inline void RunConnectivity(BatchDynamicEdges<W>& batch_edge_list, long batch_si
         };
 
         auto edge_table =
-            pbbslib::make_sparse_table<K, V>(2 * batch.size(), empty, hash_pair);
+            gbbs::make_sparse_table<K, V>(2 * batch.size(), empty, hash_pair);
 
         bool abort = false;
 

@@ -3,6 +3,12 @@ cc_library(
   hdrs = ["Connectivity.h"],
   deps = [
   "//gbbs:gbbs",
+  "//gbbs/helpers:sparse_table",
+  "//gbbs:julienne",
+  "//benchmarks/KCore/JulienneDBS17:KCore_main",
+  "//benchmarks/BatchDynamicConnectivity/EulerTourTree:ETTree_main",
+  "//gbbs:graph_io",
+  "//gbbs:dynamic_graph_io"
   ]
 )
 
