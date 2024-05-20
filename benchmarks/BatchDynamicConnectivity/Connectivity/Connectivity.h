@@ -14,164 +14,8 @@ using K = std::pair<uintE, uintE>;
 using V = uintE;
 using KV = std::pair<K, V>;
 
-
-// A union-find node that stores its parent and rank
-struct UFNode {
-  uintE parent;
-  uintE rank;
-  UFNode() {}
-
-  UFNode(int p, int r) : parent(p), rank(r) {}
-};
-
-// A union-find data structure that supports parallel find and union operations
-class UnionFind {
-  public:
-  // An array of union-find nodes
-  sequence<UFNode> nodes;
-
-  UnionFind() {}
-  // Constructor that initializes each node as a singleton set
-  UnionFind(size_t n) {
-      nodes = sequence<UFNode>(n);
-      parallel_for(0, n, [&] (size_t i) {
-        nodes[i] = UFNode(i, 0);
-      });
-  }
-
-  // Find the root of the set containing x
-  uintE find(uintE x) {
-    // Use path compression to update the parent pointers along the path
-    if (nodes[x].parent != x) {
-      nodes[x].parent = find(nodes[x].parent);
-    }
-    return nodes[x].parent;
-  }
-
-  // Union the sets containing x and y
-  void unionf(uintE x, uintE y) {
-    // Find the roots of x and y
-    int xRoot = find(x);
-    int yRoot = find(y);
-    // If they are already in the same set, do nothing
-    if (xRoot == yRoot) return;
-    // Use union by rank to merge the smaller set into the larger one
-    if (nodes[xRoot].rank < nodes[yRoot].rank) {
-      nodes[xRoot].parent = yRoot;
-    } else if (nodes[xRoot].rank > nodes[yRoot].rank) {
-      nodes[yRoot].parent = xRoot;
-    } else {
-      nodes[yRoot].parent = xRoot;
-      nodes[xRoot].rank++;
-    }
-  }
-
-  // Parallel find operation that returns an array of roots for each element
-  parlay::sequence<std::pair<uintE, uintE>> parallel_find(sequence<std::pair<uintE, uintE>> nodes) {
-    // Use parallel reduce to find the roots of each element in parallel
-    sequence<std::pair<uintE, uintE>> parents = sequence<std::pair<uintE, uintE>>(nodes.size());
-    parallel_for(0, nodes.size(),  [&](size_t i) {
-      parents[i] = std::make_pair(find(nodes[i].first), find(nodes[i].second));
-    });
-
-    return parents;
-  }
-};
-
-// A type alias for an edge represented by a pair of uintE
-using edge_mst_type = std::pair<uintE, uintE>;
-
-// A function that returns a sequence of edges in the spanning forest
-sequence<edge_mst_type> parallel_spanning_forest(sequence<edge_mst_type> edges, size_t n) {
-  // Initialize a union-find data structure
-  UnionFind uf(n);
-  // Initialize a sequence of edges in the spanning forest
-  sequence<edge_mst_type> forest;
-  // Repeat until all the edges are processed
-  while (!edges.empty()) {
-    // Find the roots of each endpoint in parallel
-    auto not_selected = sequence<bool>(edges.size(), true);
-
-    auto endpoints = sequence<std::pair<uintE, uintE>>(edges.size());
-    parallel_for(0, edges.size(), [&](size_t i){
-        endpoints[i] = std::make_pair(edges[i].first, edges[i].second);
-    });
-
-    auto roots = uf.parallel_find(endpoints);
-
-    using K = std::pair<uintE, uintE>;
-    using V = std::pair<std::pair<uintE, uintE>, uintE>;
-    using KV = std::pair<K, V>;
-
-    KV empty =
-        std::make_pair(std::make_pair(UINT_E_MAX, UINT_E_MAX), std::make_pair(
-                std::make_pair(UINT_E_MAX, UINT_E_MAX), UINT_E_MAX));
-
-    auto hash_pair = [](const std::pair<uintE, uintE>& t) {
-        size_t l = std::min(std::get<0>(t), std::get<1>(t));
-        size_t r = std::max(std::get<0>(t), std::get<1>(t));
-        size_t key = (l << 32) + r;
-        return parlay::hash64_2(key);
-    };
-
-    auto root_edge_to_original =
-         gbbs::make_sparse_table<K, V>(roots.size(), empty, hash_pair);
-
-    parallel_for(0, roots.size(), [&](size_t i){
-        auto edge = roots[i];
-        auto u = std::get<0>(edge);
-        auto v = std::get<1>(edge);
-        //std::cout << "root edges: " << u << ", " << v << std::endl;
-
-        bool abort = false;
-        root_edge_to_original.insert_check(std::make_pair(std::make_pair(u,
-            v), std::make_pair(endpoints[i], i)), &abort);
-    });
-
-    // Filter out the edges that connect vertices in the same component
-
-    auto bool_filter = sequence<bool>(roots.size());
-    parallel_for(0, bool_filter.size(), [&](size_t i){
-        bool_filter[i] = roots[i].first != roots[i].second;
-        not_selected[i] = bool_filter[i];
-    });
-    auto filtered = parlay::pack(roots, bool_filter);
-
-    auto compare_tup = [&] (const std::pair<uintE, uintE> l, const std::pair<uintE, uintE> r) {
-        return l.first < r.first;
-    };
-    parlay::sort_inplace(parlay::make_slice(filtered), compare_tup);
-
-    auto bool_seq = sequence<bool>(filtered.size() + 1);
-    parallel_for(0, filtered.size() + 1, [&](size_t i) {
-        bool_seq[i] = (i == 0) || (i == filtered.size()) ||
-            (filtered[i-1].first != filtered[i].first);
-    });
-    auto starts = parlay::pack_index(bool_seq);
-
-    auto selected = sequence<edge_mst_type>(starts.size()-1);
-
-    parallel_for(0, starts.size()-1, [&](size_t i){
-        auto original_edge = root_edge_to_original.find(filtered[starts[i]],
-                std::make_pair(std::make_pair(UINT_E_MAX, UINT_E_MAX), UINT_E_MAX));
-        selected[i] = original_edge.first;
-        not_selected[original_edge.second] = false;
-    });
-
-    // Append the selected edges to the forest
-    forest.append(selected);
-
-    // Union the components connected by the selected edges
-    parallel_for(0, selected.size(), [&](size_t i) {
-      uf.unionf(selected[i].first, selected[i].second);
-    });
-
-    // Remove the selected edges from the original sequence
-    edges = parlay::pack(edges, not_selected);
-  }
-  // Return the forest
-  return forest;
-}
+using V_pairs = std::pair<uintE, uintE>;
+using KV_pairs = std::pair<K, V_pairs>;
 
 struct Connectivity {
     size_t n;
@@ -206,6 +50,7 @@ struct Connectivity {
     template <class Seq, class KY, class VL, class HH>
     void batch_insertion(const Seq& insertions, gbbs::sparse_table<KY, VL, HH>& edge_table,
             gbbs::sparse_table<KY, bool, HH>& existence_table) {
+
         auto non_empty_spanning_tree = true;
         auto first = true;
         sequence<std::pair<uintE, uintE>> edges_both_directions = sequence<std::pair<uintE, uintE>>(0);
@@ -345,11 +190,7 @@ struct Connectivity {
                 verts[2 * i + 1] = unique_representative_edges[i].second;
             });
 
-            using K = std::pair<uintE, uintE>;
-            using V = std::pair<uintE, uintE>;
-            using KV = std::pair<K, V>;
-
-            KV empty =
+            KV_pairs empty =
                 std::make_pair(std::make_pair(UINT_E_MAX, UINT_E_MAX), std::make_pair(UINT_E_MAX, UINT_E_MAX));
             auto hash_pair = [](const std::pair<uintE, uintE>& t) {
                     size_t l = std::min(std::get<0>(t), std::get<1>(t));
@@ -364,7 +205,7 @@ struct Connectivity {
             };
 
             auto representative_edge_to_original =
-                gbbs::make_sparse_table<K, V>(unique_representative_edges.size(), empty, hash_pair);
+                gbbs::make_sparse_table<K, V_pairs>(unique_representative_edges.size(), empty, hash_pair);
 
             parlay::sort_inplace(parlay::make_slice(verts));
 
