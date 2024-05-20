@@ -7,6 +7,7 @@ cc_library(
   "//gbbs:julienne",
   "//benchmarks/KCore/JulienneDBS17:KCore_main",
   "//benchmarks/BatchDynamicConnectivity/EulerTourTree:ETTree_main",
+  "//benchmarks/SpanningForest/SDB14:SpanningForest_main",
   "//gbbs:graph_io",
   "//gbbs:dynamic_graph_io"
   ]

@@ -7,6 +7,7 @@
 #include "gbbs/helpers/sparse_table.h"
 #include "benchmarks/KCore/JulienneDBS17/KCore.h"
 #include "benchmarks/BatchDynamicConnectivity/EulerTourTree/ETTree.h"
+#include "benchmarks/SpanningForest/SDB14/SpanningForest.h"
 
 namespace gbbs {
 using K = std::pair<uintE, uintE>;
@@ -340,8 +341,8 @@ struct Connectivity {
                 auto unique_edge = real_edges[representative_edges[unique_starts[i]].second];
                 unique_real_edges[i] = unique_edge;
 
-                verts[2 * i] = unique_representative_edges[i].first.first;
-                verts[2 * i + 1] = unique_representative_edges[i].first.second;
+                verts[2 * i] = unique_representative_edges[i].first;
+                verts[2 * i + 1] = unique_representative_edges[i].second;
             });
 
             using K = std::pair<uintE, uintE>;
@@ -357,10 +358,10 @@ struct Connectivity {
                 return parlay::hash64_2(key);
             };
 
-            uintE vert_empty = UINT_E_MAX;
-            auto vert_hash = [](const uintE& t{
+            std::pair<uintE, uintE> vert_empty = std::make_pair(UINT_E_MAX, UINT_E_MAX);
+            auto vert_hash = [](const uintE& t){
                 return parlay::hash64_2(t);
-            });
+            };
 
             auto representative_edge_to_original =
                 gbbs::make_sparse_table<K, V>(unique_representative_edges.size(), empty, hash_pair);
@@ -369,9 +370,8 @@ struct Connectivity {
 
             auto verts_bool_seq = sequence<bool>(verts.size());
             parallel_for(0, verts.size(), [&](size_t i) {
-            bool_seq[i] = (i == 0) ||
-                ((verts[i-1].first != verts[i].first) ||
-                 (verts[i-1].second != verts[i].second));
+            bool_seq[i] = ((i == 0) ||
+                (verts[i-1] != verts[i]));
             });
             auto remapped_verts = parlay::pack_index(verts_bool_seq);
             auto original_to_remapped_verts = gbbs::make_sparse_table<uintE, uintE>(remapped_verts.size(),
@@ -382,7 +382,7 @@ struct Connectivity {
                 original_to_remapped_verts.insert_check(std::make_pair(verts[remapped_verts[i]], i), &abort);
             });
 
-            auto remapped_edges = sequence<std::pair<uintE, uintE>>(unique_representative_edges.size());
+            auto remapped_edges = sequence<std::tuple<uintE, uintE, uintE>>(unique_representative_edges.size());
 
             parallel_for(0, unique_representative_edges.size(), [&](size_t i){
                 auto edge = unique_representative_edges[i];
@@ -397,7 +397,7 @@ struct Connectivity {
                 if (remapped_u == UINT_E_MAX || remapped_v == UINT_E_MAX)
                     std::cout << "ERROR: remapping vertices" << std::endl;
 
-                remapped_edges[i] = std::make_pair(remapped_u, remapped_v);
+                remapped_edges[i] = std::make_tuple(remapped_u, remapped_v, (uintE) 1);
                 representative_edge_to_original.insert_check(std::make_pair(std::make_pair(remapped_u,
                         remapped_v), unique_real_edges[i]), &abort);
             });
@@ -405,7 +405,7 @@ struct Connectivity {
 
             auto new_graph = sym_graph_from_edges(remapped_edges, remapped_verts.size());
 
-            auto spanning_forest = parallel_spanning_forest(unique_representative_edges, n);
+            auto spanning_forest = workefficient_sf::SpanningForest(new_graph);
             if(spanning_forest.size() == 0)
                 non_empty_spanning_tree = false;
 
@@ -413,11 +413,9 @@ struct Connectivity {
             parallel_for(0, spanning_forest.size(), [&](size_t i) {
                 auto vert1 = std::get<0>(spanning_forest[i]);
                 auto vert2 = std::get<1>(spanning_forest[i]);
-                std::cout << "spanning forest edge: " << vert1 << ", " << vert2 << std::endl;
 
                 auto u = std::min(vert1, vert2);
                 auto v = std::max(vert1, vert2);
-                //std::cout << "spanning tree edges: " << u << ", " << v << std::endl;
 
                 auto original_edge = representative_edge_to_original.find(std::make_pair(u, v), std::make_pair(UINT_E_MAX, UINT_E_MAX));
                 std::cout << "found original edges: "<< original_edge.first << ", " << original_edge.second << std::endl;
