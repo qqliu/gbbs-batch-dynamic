@@ -211,10 +211,7 @@ struct Connectivity {
         sequence<size_t> starts = sequence<size_t>(0);
         sequence<SkipList::SkipListElement*> representative_nodes = sequence<SkipList::SkipListElement*>(0);
 
-        std::cout << "next batch" << std::endl;
         while(non_empty_spanning_tree) {
-            std::cout << "next spanning tree" << std::endl;
-            //std::cout << "number of edges in insertions: " << insertions.size() << std::endl;
             if (first) {
                 edges_both_directions =  sequence<std::pair<uintE, uintE>>(2 * insertions.size());
 
@@ -405,6 +402,8 @@ struct Connectivity {
                 representative_edge_to_original.insert_check(std::make_pair(std::make_pair(u,
                         v), unique_real_edges[i]), &abort);
             });
+
+            //TODO: replace with GBBS spanning forest
 
             auto spanning_forest = parallel_spanning_forest(unique_representative_edges, n);
             if(spanning_forest.size() == 0)
