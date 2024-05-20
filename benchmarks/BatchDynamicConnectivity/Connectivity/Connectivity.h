@@ -272,7 +272,6 @@ struct Connectivity {
             parallel_for(0, representative_nodes.size(), [&](size_t i) {
                 auto id = representative_nodes[i]->id.first;
                 auto xor_sums = tree.get_tree_xor(id);
-                bool is_present = false;
                 bool is_real_edge = false;
 
                 for (size_t ii = 0; ii < xor_sums.size(); ii++) {
@@ -299,7 +298,6 @@ struct Connectivity {
             auto real_edges = parlay::pack(found_possible_edges, is_edge);
             auto representative_edges = sequence<std::pair<std::pair<uintE, uintE>, uintE>>(real_edges.size());
 
-            size_t max_index = 0;
             parallel_for(0, real_edges.size(), [&](size_t i) {
                 auto u = tree.vertices[real_edges[i].first];
                 auto v = tree.vertices[real_edges[i].second];
@@ -307,13 +305,12 @@ struct Connectivity {
                 auto node_b = tree.skip_list.find_representative(&v);
                 auto node_a_id = std::min(node_a->id.first, node_a->id.second);
                 auto node_b_id = std::min(node_b->id.first, node_b->id.second);
-                if (node_a_id > max_index)
-                    max_index = node_a_id;
-                if (node_b_id > max_index)
-                    max_index = node_b_id;
 
                 auto ru = std::min(node_a_id, node_b_id);
                 auto rv = std::max(node_a_id, node_b_id);
+
+                if (ru == rv)
+                    std::cout << "ERROR: found edge in the same tree" << std::endl;
 
                 representative_edges[i] = std::make_pair(std::make_pair(ru, rv), i);
             });
@@ -326,21 +323,25 @@ struct Connectivity {
             };
             parlay::sort_inplace(parlay::make_slice(representative_edges), compare_tup);
 
-            auto bool_seq = sequence<bool>(representative_edges.size() + 1);
-            parallel_for(0, representative_edges.size() + 1, [&](size_t i) {
-            bool_seq[i] = (i == 0) || (i == representative_edges.size()) ||
+            auto bool_seq = sequence<bool>(representative_edges.size());
+            parallel_for(0, representative_edges.size(), [&](size_t i) {
+            bool_seq[i] = (i == 0) ||
                 ((representative_edges[i-1].first != representative_edges[i].first) ||
                  (representative_edges[i-1].second != representative_edges[i].second));
             });
-            starts = parlay::pack_index(bool_seq);
-            auto unique_representative_edges = sequence<std::pair<uintE, uintE>>(starts.size());
-            auto unique_real_edges = sequence<std::pair<uintE, uintE>>(starts.size());
+            auto unique_starts = parlay::pack_index(bool_seq);
+            auto unique_representative_edges = sequence<std::pair<uintE, uintE>>(unique_starts.size());
+            auto unique_real_edges = sequence<std::pair<uintE, uintE>>(unique_starts.size());
 
-            parallel_for(0, starts.size() - 1, [&](size_t i){
-                unique_representative_edges[i] = representative_edges[starts[i]].first;
-                auto unique_edge = real_edges[representative_edges[starts[i]].second];
-                std::cout << "Unique edge: " << unique_edge.first << ", " << unique_edge.second << std::endl;
+            auto verts = sequence<uintE>(2 * unique_starts.size());
+
+            parallel_for(0, unique_starts.size(), [&](size_t i){
+                unique_representative_edges[i] = representative_edges[unique_starts[i]].first;
+                auto unique_edge = real_edges[representative_edges[unique_starts[i]].second];
                 unique_real_edges[i] = unique_edge;
+
+                verts[2 * i] = unique_representative_edges[i].first.first;
+                verts[2 * i + 1] = unique_representative_edges[i].first.second;
             });
 
             using K = std::pair<uintE, uintE>;
@@ -355,8 +356,33 @@ struct Connectivity {
                     size_t key = (l << 32) + r;
                 return parlay::hash64_2(key);
             };
+
+            uintE vert_empty = UINT_E_MAX;
+            auto vert_hash = [](const uintE& t{
+                return parlay::hash64_2(t);
+            });
+
             auto representative_edge_to_original =
                 gbbs::make_sparse_table<K, V>(unique_representative_edges.size(), empty, hash_pair);
+
+            parlay::sort_inplace(parlay::make_slice(verts));
+
+            auto verts_bool_seq = sequence<bool>(verts.size());
+            parallel_for(0, verts.size(), [&](size_t i) {
+            bool_seq[i] = (i == 0) ||
+                ((verts[i-1].first != verts[i].first) ||
+                 (verts[i-1].second != verts[i].second));
+            });
+            auto remapped_verts = parlay::pack_index(verts_bool_seq);
+            auto original_to_remapped_verts = gbbs::make_sparse_table<uintE, uintE>(remapped_verts.size(),
+                vert_empty, vert_hash);
+
+            bool abort = false;
+            parallel_for(0, remapped_verts.size(), [&] (size_t i){
+                original_to_remapped_verts.insert_check(std::make_pair(verts[remapped_verts[i]], i), &abort);
+            });
+
+            auto remapped_edges = sequence<std::pair<uintE, uintE>>(unique_representative_edges.size());
 
             parallel_for(0, unique_representative_edges.size(), [&](size_t i){
                 auto edge = unique_representative_edges[i];
@@ -364,14 +390,20 @@ struct Connectivity {
                 auto vert2 = std::get<1>(edge);
                 auto u = std::min(vert1, vert2);
                 auto v = std::max(vert1, vert2);
-                //std::cout << "rep edges: " << u << ", " << v << std::endl;
 
-                bool abort = false;
-                representative_edge_to_original.insert_check(std::make_pair(std::make_pair(u,
-                        v), unique_real_edges[i]), &abort);
+                auto remapped_u = original_to_remapped_verts.find(u, UINT_E_MAX);
+                auto remapped_v = original_to_remapped_verts.find(v, UINT_E_MAX);
+
+                if (remapped_u == UINT_E_MAX || remapped_v == UINT_E_MAX)
+                    std::cout << "ERROR: remapping vertices" << std::endl;
+
+                remapped_edges[i] = std::make_pair(remapped_u, remapped_v);
+                representative_edge_to_original.insert_check(std::make_pair(std::make_pair(remapped_u,
+                        remapped_v), unique_real_edges[i]), &abort);
             });
 
-            //TODO: replace with GBBS spanning forest
+
+            auto new_graph = sym_graph_from_edges(remapped_edges, remapped_verts.size());
 
             auto spanning_forest = parallel_spanning_forest(unique_representative_edges, n);
             if(spanning_forest.size() == 0)
