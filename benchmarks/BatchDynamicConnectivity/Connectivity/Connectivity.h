@@ -216,9 +216,7 @@ struct Connectivity {
                 edges_both_directions =  sequence<std::pair<uintE, uintE>>(2 * insertions.size());
 
                 parallel_for(0, insertions.size(), [&](size_t i) {
-                    //std::cout << "original edge: " << insertions[i].first << ", " << insertions[i].second << std::endl;
                     auto [u, v] = insertions[i];
-                    //tree.create_edge_in_edge_table(u, v);
                     edges_both_directions[2 * i] = std::make_pair(u, v);
                     edges_both_directions[2 * i + 1] = std::make_pair(v, u);
                 });
@@ -243,48 +241,29 @@ struct Connectivity {
                     sequence<std::pair<SkipList::SkipListElement*,
                     sequence<sequence<std::pair<uintE, uintE>>>>>(starts.size()- 1);
 
-            /*std::cout << "starts size: " << starts.size() << std::endl;
-            std::cout << "edges both directions size: " << edges_both_directions.size() << std::endl;
-            for (int i = 0; i < starts.size(); i++) {
-                    std::cout << "starts: " << starts[i] << std::endl;
-            }
-
-            for (int i = 0; i < edges_both_directions.size(); i++) {
-                    std::cout << "edge: " << edges_both_directions[i].first << ", " << edges_both_directions[i].second
-                        << std::endl;
-            }*/
-
                 parallel_for(0, starts.size() - 1, [&](size_t i) {
-                    for (size_t j = starts[i]; j < starts[i+1]; j++) {
-                    /*std::cout << "starts for " << i <<
-                        ": " << edges_both_directions[j].first << ", "
-                        << edges_both_directions[j].second << std::endl;*/
 
+                    // update j's cutset data structure; need to be sequential because accessing same arrays
+                    for (size_t j = starts[i]; j < starts[i+1]; j++) {
                         tree.add_edge_to_cutsets(edges_both_directions[j]);
                     }
+
                     SkipList::SkipListElement* our_vertex = &tree.vertices[edges_both_directions[starts[i]].first];
                     representative_nodes[i] =
                         tree.skip_list.find_representative(our_vertex);
                     update_seq[i] = std::make_pair(our_vertex, our_vertex->values[0]);
                 });
+
                 tree.skip_list.batch_update_xor(&update_seq);
             }
             first = false;
             if (!first) {
                 parallel_for(0, starts.size() - 1, [&](size_t i) {
-                    std::cout << "printing values" << std::endl;
-                    std::cout << "new starts: " << starts[i] << ", " << edges_both_directions[starts[i]].first
-                        << std::endl;
-                    std::cout << "rep nodes size: " << representative_nodes.size() << std::endl;
                     SkipList::SkipListElement* our_vertex = &tree.vertices[edges_both_directions[starts[i]].first];
-                    std::cout << "got list element: " << representative_nodes.size() << std::endl;
                     representative_nodes[i] =
                         tree.skip_list.find_representative(our_vertex);
-                    std::cout << "finished updating representative" << std::endl;
                 });
             }
-
-            std::cout << "doing update" << std::endl;
 
             sequence<std::pair<uintE, uintE>> found_possible_edges =
                     sequence<std::pair<uintE, uintE>>(representative_nodes.size());
@@ -292,30 +271,21 @@ struct Connectivity {
 
             parallel_for(0, representative_nodes.size(), [&](size_t i) {
                 auto id = representative_nodes[i]->id.first;
-                auto sum = tree.get_tree_xor(id);
+                auto xor_sums = tree.get_tree_xor(id);
                 bool is_present = false;
                 bool is_real_edge = false;
 
-                for (size_t ii = 0; ii < sum.size(); ii++) {
+                for (size_t ii = 0; ii < xor_sums.size(); ii++) {
                 if (!is_real_edge) {
-                    for (size_t ij = 0; ij < sum[ii].size(); ij++) {
+                    for (size_t ij = 0; ij < xor_sums[ii].size(); ij++) {
                         if (!is_real_edge) {
-                            //std::cout << "rep values for " << id << ": " << sum[ii][ij].first << ", " << sum[ii][ij].second
-                                //<< std::endl;
-                            is_present = sum[ii][ij].first != UINT_E_MAX && sum[ii][ij].second != UINT_E_MAX;
-                            auto u = sum[ii][ij].first;
-                            auto v = sum[ii][ij].second;
-                            if (is_present) {
-                                if (u < n && v < n) {
-                                    auto index = edge_table.find(std::make_pair(u, v), UINT_E_MAX); //, UINT_E_MAX);
-                                    //auto element = &tree.edge_table[u][v];
-                                    /*std::cout << "element: " << element->id.first << ", " << element->id.second <<
-                                        std::endl;*/
-
-                                    if (index != UINT_E_MAX) { // && element->id.second != UINT_E_MAX) {
-                                        is_real_edge = true;
-                                        found_possible_edges[i] = std::make_pair(u, v);
-                                    }
+                            if (xor_sums[ii][ij].first != UINT_E_MAX
+                                && xor_sums[ii][ij].second != UINT_E_MAX) {
+                                auto u = xor_sums[ii][ij].first;
+                                auto v = xor_sums[ii][ij].second;
+                                if (u < n && v < n && existence_table.find(std::make_pair(u, v), false)) {
+                                    is_real_edge = true;
+                                    found_possible_edges[i] = std::make_pair(u, v);
                                 }
                             }
                         }
@@ -323,8 +293,6 @@ struct Connectivity {
                 }
                 }
 
-                /*auto possible_edge =
-                    tree.edge_table[found_possible_edges[i].first][found_possible_edges[i].second];*/
                 is_edge[i] = is_real_edge;
             });
 
@@ -364,7 +332,7 @@ struct Connectivity {
                 ((representative_edges[i-1].first != representative_edges[i].first) ||
                  (representative_edges[i-1].second != representative_edges[i].second));
             });
-            auto starts = parlay::pack_index(bool_seq);
+            starts = parlay::pack_index(bool_seq);
             auto unique_representative_edges = sequence<std::pair<uintE, uintE>>(starts.size());
             auto unique_real_edges = sequence<std::pair<uintE, uintE>>(starts.size());
 
