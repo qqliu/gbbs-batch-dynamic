@@ -184,10 +184,21 @@ struct Connectivity {
     }
 
     // initialize edgemap for SkipListElement data structures
-    template <class Seq, class KY, class VL, class HH>
-    void initialize_data_structures(const Seq& all_edges, gbbs::sparse_table<KY, VL, HH> edge_table) {
+    template <class KY, class VL, class HH, class W>
+    void initialize_data_structures(BatchDynamicEdges<W>& batch_edge_list,
+            gbbs::sparse_table<KY, VL, HH> edge_table) {
+        auto all_edges = batch_edge_list.edges;
+
+        bool abort = false;
+
         parallel_for(0, all_edges.size(), [&](size_t i){
-            edge_table.insert_check()
+            uintE v = all_edges[i].from;
+            uintE w = all_edges[i].to;
+
+            if (all_edges[i].insert) {
+                edge_table.insert_check(std::make_pair(std::make_pair(v, w), 2 * i), &abort);
+                edge_table.insert_check(std::make_pair(std::make_pair(v, w), 2 * i + 1), &abort);
+            }
         });
     }
 
@@ -469,7 +480,6 @@ inline void RunConnectivity(BatchDynamicEdges<W>& batch_edge_list, long batch_si
         size_t offset, size_t n, int copies, size_t m, double pb) {
         auto cutset = Connectivity(n, copies, m, pb);
         auto batch = batch_edge_list.edges;
-        std::cout << "batch size: " << batch.size() << std::endl;
 
         KV empty =
             std::make_pair(std::make_pair(UINT_E_MAX, UINT_E_MAX), UINT_E_MAX);
@@ -484,7 +494,13 @@ inline void RunConnectivity(BatchDynamicEdges<W>& batch_edge_list, long batch_si
         auto edge_table =
             gbbs::make_sparse_table<K, V>(2 * batch.size(), empty, hash_pair);
 
+        auto existence_table =
+            gbbs::make_sparse_table<K, bool>(2 * batch.size(), empty, hash_pair);
+
+        cutset.initialize_data_structures(batch_edge_list, edge_table);
         bool abort = false;
+
+        std::cout << "batch size: " << batch.size() << std::endl;
 
         if (offset != 0) {
             for (size_t i = 0; i < offset; i += 1000000) {
@@ -502,10 +518,10 @@ inline void RunConnectivity(BatchDynamicEdges<W>& batch_edge_list, long batch_si
                     uintE vert1 = insertions[i].from;
                     uintE vert2 = insertions[i].to;
 
-                    edge_table.insert_check(std::make_pair(std::make_pair(vert1,
-                        vert2), 2 * i), &abort);
-                    edge_table.insert_check(std::make_pair(std::make_pair(vert2,
-                        vert1), 2 * i + 1), &abort);
+                    existence_table.insert_check(std::make_pair(std::make_pair(vert1,
+                        vert2), true), &abort);
+                    existence_table.insert_check(std::make_pair(std::make_pair(vert2,
+                        vert1), true), &abort);
 
                     return std::make_pair(vert1, vert2);
                 });
@@ -515,20 +531,16 @@ inline void RunConnectivity(BatchDynamicEdges<W>& batch_edge_list, long batch_si
                     uintE vert1 = deletions[i].from;
                     uintE vert2 = deletions[i].to;
 
+                    existence_table.insert_check(std::make_pair(std::make_pair(vert1,
+                        vert2), false), &abort);
+                    existence_table.insert_check(std::make_pair(std::make_pair(vert2,
+                        vert1), false), &abort);
+
                     return std::make_pair(vert1, vert2);
                 });
+
                 cutset.batch_insertion(batch_insertions, edge_table);
                 cutset.batch_deletion(batch_deletions, edge_table);
-
-                parallel_for(0, batch_deletions.size(), [&](size_t i){
-                    uintE vert1 = batch_deletions[i].first;
-                    uintE vert2 = batch_deletions[i].second;
-
-                    edge_table.insert_check(std::make_pair(std::make_pair(vert1,
-                        vert2), UINT_E_MAX), &abort);
-                    edge_table.insert_check(std::make_pair(std::make_pair(vert2,
-                        vert1), UINT_E_MAX), &abort);
-                });
             }
         }
 
@@ -551,10 +563,10 @@ inline void RunConnectivity(BatchDynamicEdges<W>& batch_edge_list, long batch_si
                 uintE vert1 = insertions[i].from;
                 uintE vert2 = insertions[i].to;
 
-                edge_table.insert_check(std::make_pair(std::make_pair(vert1,
-                    vert2), 2 * i), &abort);
-                edge_table.insert_check(std::make_pair(std::make_pair(vert2,
-                    vert1), 2 * i + 1), &abort);
+                existence_table.insert_check(std::make_pair(std::make_pair(vert1,
+                    vert2), true), &abort);
+                existence_table.insert_check(std::make_pair(std::make_pair(vert2,
+                    vert1), true), &abort);
 
                 return std::make_pair(vert1, vert2);
             });
@@ -565,20 +577,16 @@ inline void RunConnectivity(BatchDynamicEdges<W>& batch_edge_list, long batch_si
                 uintE vert1 = deletions[i].from;
                 uintE vert2 = deletions[i].to;
 
+                existence_table.insert_check(std::make_pair(std::make_pair(vert1,
+                    vert2), false), &abort);
+                existence_table.insert_check(std::make_pair(std::make_pair(vert2,
+                    vert1), false), &abort);
+
                 return std::make_pair(vert1, vert2);
             });
 
             cutset.batch_insertion(batch_insertions, edge_table);
-
-            parallel_for(0, batch_deletions.size(), [&](size_t i){
-                uintE vert1 = batch_deletions[i].first;
-                uintE vert2 = batch_deletions[i].second;
-
-                edge_table.insert_check(std::make_pair(std::make_pair(vert1,
-                    vert2), UINT_E_MAX), &abort);
-                edge_table.insert_check(std::make_pair(std::make_pair(vert2,
-                    vert1), UINT_E_MAX), &abort);
-            });
+            cutset.batch_deletion(batch_deletions, edge_table);
 
             sequence<int> correct = sequence<int>(batch_insertions.size(), false);
              parallel_for(0, batch_insertions.size(), [&](size_t i) {
@@ -588,80 +596,6 @@ inline void RunConnectivity(BatchDynamicEdges<W>& batch_edge_list, long batch_si
             auto num_correct = parlay::scan_inplace(correct);
 
             std::cout << "fraction correct: " << (num_correct * 1.0)/batch_insertions.size() << std::endl;
-
-        /*num_insertion_flips += layers.batch_insertion(batch_insertions);
-        double insertion_time = t.stop();
-
-        t.start();
-        num_deletion_flips += layers.batch_deletion(batch_deletions);
-
-        max_degree = layers.max_degree();
-
-        double deletion_time = t.stop();
-        double tt = insertion_time + deletion_time;
-
-        std::cout << "### Batch Running Time: " << tt << std::endl;
-        std::cout << "### Insertion Running Time: " << insertion_time << std::endl;
-        std::cout << "### Deletion Running Time: " << deletion_time << std::endl;
-        std::cout << "### Batch Num: " << end_size - offset << std::endl;
-        std::cout << "### Coreness Estimate: " << layers.max_coreness() << std::endl;
-        std::cout << "### Number Insertion Flips: " << num_insertion_flips << std::endl;
-        std::cout << "### Number Deletion Flips: " << num_deletion_flips << std::endl;
-        std::cout << "### Max Outdegree: " << max_degree << std::endl;
-        if (get_size) {
-            auto size = layers.get_size();
-            std::cout << "### Size: " << size << std::endl;
-        }
-        if (compare_exact) {
-            auto graph = dynamic_edge_list_to_symmetric_graph(batch_edge_list, std::min(batch.size(),
-                        i + batch_size));
-
-            // Run kcore on graph
-            auto cores = KCore(graph, 16);
-
-            auto max_core = parlay::reduce(cores, parlay::maxm<uintE>());
-            std::cout << "### Coreness Exact: " << max_core << std::endl;
-
-            // Compare cores[v] to layers.core(v)
-            auto approximation_error = parlay::delayed_seq<float>(batch_edge_list.max_vertex,
-                    [&] (size_t j) -> float {
-                auto exact_core = j >= graph.n ? 0 : cores[j];
-                auto approx_core = layers.core(j);
-                if (exact_core == 0 || approx_core == 0) {
-                    return 0;
-                }
-                return (exact_core > approx_core) ? (float) exact_core / (float) approx_core :
-                       (float) approx_core / (float) exact_core;
-            });
-
-            double mult_appx = (2 + 2*layers.eps);
-            float bad = parlay::reduce(parlay::delayed_seq<float>(batch_edge_list.max_vertex, [&](size_t j) -> float{
-                auto true_core = j >= graph.n ? 0 : cores[j];
-                auto appx_core = layers.core(j);
-                return (appx_core > (mult_appx * true_core)) + (appx_core < (true_core/mult_appx));
-            }), parlay::addm<float>());
-
-            // Output min, max, and average error
-            float sum_error = parlay::reduce(approximation_error, parlay::addm<float>());
-            float max_error = parlay::reduce(approximation_error, parlay::maxm<float>());
-            float min_error = parlay::reduce(approximation_error,
-              parlay::make_monoid([](float l, float r){
-                if (l == 0) return r;
-                if (r == 0) return l;
-                return std::min(r, l);
-            }, (float) 0));
-            float denominator = parlay::reduce(parlay::delayed_seq<float>(batch_edge_list.max_vertex,
-                        [&] (size_t j) -> float{
-                auto exact_core = j >= graph.n ? 0 : cores[j];
-                auto approx_core = layers.core(j);
-                return (exact_core != 0) && (approx_core != 0);
-            }), parlay::addm<float>());
-            auto avg_error = (denominator == 0) ? 0 : sum_error / denominator;
-            std::cout << "### Num Bad: " << bad << std::endl;
-            std::cout << "### Per Vertex Average Coreness Error: " << avg_error << std::endl; fflush(stdout);
-            std::cout << "### Per Vertex Min Coreness Error: " << min_error << std::endl; fflush(stdout);
-            std::cout << "### Per Vertex Max Coreness Error: " << max_error << std::endl; fflush(stdout);
-        }*/
     }
 }
 
