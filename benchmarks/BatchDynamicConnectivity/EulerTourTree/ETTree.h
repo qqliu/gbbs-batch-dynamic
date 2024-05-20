@@ -49,7 +49,7 @@ struct ETTree {
     }
 
     template <class KY, class VL, class HH>
-    void link(uintE u, uintE v, gbbs::sparse_table<KY, VL, HH> edge_index_table) {
+    void link(uintE u, uintE v, gbbs::sparse_table<KY, VL, HH>& edge_index_table) {
         auto index_uv = edge_index_table.find(std::make_pair(u, v), UINT_E_MAX);
         auto index_vu = edge_index_table.find(std::make_pair(v, u), UINT_E_MAX);
 
@@ -88,7 +88,7 @@ struct ETTree {
     }
 
     template <class KY, class VL, class HH>
-    void cut(int u, int v, gbbs::sparse_table<KY, VL, HH> edge_index_table){
+    void cut(int u, int v, gbbs::sparse_table<KY, VL, HH>& edge_index_table){
             auto index_uv = edge_index_table.find(std::make_pair(u, v), UINT_E_MAX);
             if (index_uv == UINT_E_MAX)
                 std::cout << "There is an error in edge_index_table" << std::endl;
@@ -128,15 +128,15 @@ struct ETTree {
     }
 
     template <class KY, class VL, class HH>
-    void batch_link_sequential(sequence<std::pair<uintE, uintE>>links,
-            gbbs::sparse_table<KY, VL, HH> edge_index_table) {
+    void batch_link_sequential(sequence<std::pair<uintE, uintE>>& links,
+            gbbs::sparse_table<KY, VL, HH>& edge_index_table) {
             for(size_t i = 0; i < links.size(); i++) {
                 link(links[i].first, links[i].second, edge_index_table);
             }
     }
 
     template <class KY, class VL, class HH>
-    void batch_link(sequence<std::pair<uintE, uintE>>links, gbbs::sparse_table<KY, VL, HH>& edge_index_table) {
+    void batch_link(sequence<std::pair<uintE, uintE>>& links, gbbs::sparse_table<KY, VL, HH>& edge_index_table) {
         if (links.size() <= 75) {
                 batch_link_sequential(links, edge_index_table);
                 return;
@@ -251,15 +251,15 @@ struct ETTree {
     }
 
     template <class KY, class VL, class HH>
-    void batch_cut_sequential(sequence<std::pair<uintE, uintE>> cuts,
-            gbbs::sparse_table<KY, VL, HH> edge_index_table) {
+    void batch_cut_sequential(sequence<std::pair<uintE, uintE>>& cuts,
+            gbbs::sparse_table<KY, VL, HH>& edge_index_table) {
             for (size_t i = 0; i < cuts.size(); i++)
                 cut(cuts[i].first, cuts[i].second, edge_index_table);
     }
 
     template <class KY, class VL, class HH>
-    void batch_cut_recurse(sequence<std::pair<uintE, uintE>> cuts,
-        gbbs::sparse_table<KY, VL, HH> edge_index_table) {
+    void batch_cut_recurse(sequence<std::pair<uintE, uintE>>& cuts,
+        gbbs::sparse_table<KY, VL, HH>& edge_index_table) {
             sequence<SkipList::SkipListElement*> join_targets =
                 sequence<SkipList::SkipListElement*>(4 * cuts.size(), nullptr);
             sequence<SkipList::SkipListElement*> edge_elements =
@@ -404,7 +404,7 @@ struct ETTree {
     }
 
     template <class KY, class VL, class HH>
-    void batch_cut(sequence<std::pair<uintE, uintE>> cuts, gbbs::sparse_table<KY, VL, HH> edge_index_table) {
+    void batch_cut(sequence<std::pair<uintE, uintE>>& cuts, gbbs::sparse_table<KY, VL, HH>& edge_index_table) {
             if (cuts.size() <=  75) {
                     batch_cut_sequential(cuts, edge_index_table);
                     return;

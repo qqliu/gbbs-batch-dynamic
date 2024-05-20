@@ -234,7 +234,7 @@ struct SkipList {
     }
 
     sequence<std::pair<SkipListElement*, SkipListElement*>>
-        find_left_parents(size_t level, sequence<SkipListElement*> elements) {
+        find_left_parents(size_t level, sequence<SkipListElement*>& elements) {
 
         sequence<std::pair<SkipListElement*, SkipListElement*>> parents = sequence<std::pair<SkipListElement*,
             SkipListElement*>>(elements.size());

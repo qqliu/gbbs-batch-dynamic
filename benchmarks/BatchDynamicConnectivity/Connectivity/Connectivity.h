@@ -186,7 +186,7 @@ struct Connectivity {
     // initialize edgemap for SkipListElement data structures
     template <class KY, class VL, class HH, class W>
     void initialize_data_structures(BatchDynamicEdges<W>& batch_edge_list,
-            gbbs::sparse_table<KY, VL, HH> edge_table) {
+            gbbs::sparse_table<KY, VL, HH>& edge_table) {
         auto all_edges = batch_edge_list.edges;
 
         bool abort = false;
@@ -203,7 +203,8 @@ struct Connectivity {
     }
 
     template <class Seq, class KY, class VL, class HH>
-    void batch_insertion(const Seq& insertions, gbbs::sparse_table<KY, VL, HH> edge_table) {
+    void batch_insertion(const Seq& insertions, gbbs::sparse_table<KY, VL, HH>& edge_table,
+            gbbs::sparse_table<KY, bool, HH>& existence_table) {
         auto non_empty_spanning_tree = true;
         auto first = true;
         sequence<std::pair<uintE, uintE>> edges_both_directions = sequence<std::pair<uintE, uintE>>(0);
@@ -467,7 +468,8 @@ struct Connectivity {
     }
 
     template <class Seq, class KY, class VL, class HH>
-    void batch_deletion(const Seq& deletions, gbbs::sparse_table<KY, VL, HH> edge_table) {
+    void batch_deletion(const Seq& deletions, gbbs::sparse_table<KY, VL, HH>& edge_table,
+            gbbs::sparse_table<KY, bool, HH>& existence_table) {
     }
 };
 
@@ -539,8 +541,8 @@ inline void RunConnectivity(BatchDynamicEdges<W>& batch_edge_list, long batch_si
                     return std::make_pair(vert1, vert2);
                 });
 
-                cutset.batch_insertion(batch_insertions, edge_table);
-                cutset.batch_deletion(batch_deletions, edge_table);
+                cutset.batch_insertion(batch_insertions, edge_table, existence_table);
+                cutset.batch_deletion(batch_deletions, edge_table, existence_table);
             }
         }
 
@@ -585,8 +587,8 @@ inline void RunConnectivity(BatchDynamicEdges<W>& batch_edge_list, long batch_si
                 return std::make_pair(vert1, vert2);
             });
 
-            cutset.batch_insertion(batch_insertions, edge_table);
-            cutset.batch_deletion(batch_deletions, edge_table);
+            cutset.batch_insertion(batch_insertions, edge_table, existence_table);
+            cutset.batch_deletion(batch_deletions, edge_table, existence_table);
 
             sequence<int> correct = sequence<int>(batch_insertions.size(), false);
              parallel_for(0, batch_insertions.size(), [&](size_t i) {
