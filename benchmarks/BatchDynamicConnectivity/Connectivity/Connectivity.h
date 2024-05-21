@@ -111,12 +111,22 @@ struct Connectivity {
                 });
             }
 
-            sequence<std::pair<uintE, uintE>> found_possible_edges =
-                    sequence<std::pair<uintE, uintE>>(representative_nodes.size());
-            sequence<bool> is_edge = sequence<bool>(representative_nodes.size());
+            parlay::sort_inplace(parlay::make_slice(representative_nodes));
 
+            auto bool_seq = sequence<bool>(representative_nodes.size());
             parallel_for(0, representative_nodes.size(), [&](size_t i) {
-                auto id = representative_nodes[i]->id.first;
+                bool_seq[i] = (i == 0) ||
+                       (edges_both_directions[i-1] != edges_both_directions[i]);
+            });
+            auto representative_starts = parlay::pack_index(bool_seq);
+
+            sequence<std::pair<uintE, uintE>> found_possible_edges =
+                    sequence<std::pair<uintE, uintE>>(representative_starts.size());
+            sequence<bool> is_edge = sequence<bool>(representative_starts.size());
+
+            parallel_for(0, representative_starts.size(), [&](size_t i) {
+                auto representative_node = representative_nodes[representative_starts[i]];
+                auto id = representative_node->id.first;
                 auto xor_sums = tree.get_tree_xor(id);
                 bool is_real_edge = false;
 
@@ -169,13 +179,13 @@ struct Connectivity {
             };
             parlay::sort_inplace(parlay::make_slice(representative_edges), compare_tup);
 
-            auto bool_seq = sequence<bool>(representative_edges.size());
+            auto unique_bool_seq = sequence<bool>(representative_edges.size());
             parallel_for(0, representative_edges.size(), [&](size_t i) {
             bool_seq[i] = (i == 0) ||
                 ((representative_edges[i-1].first != representative_edges[i].first) ||
                  (representative_edges[i-1].second != representative_edges[i].second));
             });
-            auto unique_starts = parlay::pack_index(bool_seq);
+            auto unique_starts = parlay::pack_index(unique_bool_seq);
             auto unique_representative_edges = sequence<std::pair<uintE, uintE>>(unique_starts.size());
             auto unique_real_edges = sequence<std::pair<uintE, uintE>>(unique_starts.size());
 
@@ -249,52 +259,25 @@ struct Connectivity {
             auto spanning_forest = workefficient_sf::SpanningForest(new_graph);
             if(spanning_forest.size() == 0)
                 non_empty_spanning_tree = false;
+            else {
+                auto original_edges = sequence<std::pair<uintE, uintE>>(spanning_forest.size());
+                parallel_for(0, spanning_forest.size(), [&](size_t i) {
+                    auto u = std::get<0>(spanning_forest[i]);
+                    auto v = std::get<1>(spanning_forest[i]);
 
-            auto original_edges = sequence<std::pair<uintE, uintE>>(spanning_forest.size());
-            parallel_for(0, spanning_forest.size(), [&](size_t i) {
-                auto vert1 = std::get<0>(spanning_forest[i]);
-                auto vert2 = std::get<1>(spanning_forest[i]);
+                    auto original_edge = representative_edge_to_original.find(std::make_pair(u, v),
+                        std::make_pair(UINT_E_MAX, UINT_E_MAX));
 
-                auto u = std::min(vert1, vert2);
-                auto v = std::max(vert1, vert2);
+                    if (original_edge.first == UINT_E_MAX || original_edge.second == UINT_E_MAX)
+                        std::cout << "ERROR: representative edge not found in hashmap" << std::endl;
 
-                auto original_edge = representative_edge_to_original.find(std::make_pair(u, v), std::make_pair(UINT_E_MAX, UINT_E_MAX));
-                std::cout << "found original edges: "<< original_edge.first << ", " << original_edge.second << std::endl;
-                if (original_edge.first == UINT_E_MAX || original_edge.second == UINT_E_MAX)
-                    std::cout << "FAILURE: THERE IS A BUG" << std::endl;
-                original_edges[i] = std::make_pair(std::min(original_edge.first, original_edge.second),
-                    std::max(original_edge.first, original_edge.second));
-                std::cout << "checking original edges: " << original_edges[i].first << ", " <<
-                    original_edges[i].second << std::endl;
-            });
+                    original_edges[i] = std::make_pair(std::min(original_edge.first, original_edge.second),
+                        std::max(original_edge.first, original_edge.second));
+                });
 
-            auto compare_tup1 = [&] (const std::pair<uintE, uintE> l, const std::pair<uintE, uintE> r) {
-                return (l.first == r.first && l.second <= r.second) || (l.first < r.first);
-            };
-            parlay::sort_inplace(parlay::make_slice(original_edges), compare_tup1);
-
-            auto bool_seq1 = sequence<bool>(original_edges.size() + 1);
-            parallel_for(0, original_edges.size() + 1, [&](size_t i) {
-                bool_seq1[i] = (i == 0) || (i == original_edges.size()) ||
-                    ((original_edges[i-1].first != original_edges[i].first) || (original_edges[i-1].second !=
-                     original_edges[i].second));
-            });
-            auto starts1 = parlay::pack_index(bool_seq1);
-            std::cout << "starts size " << starts1.size() << ": ";
-            for (size_t i = 0; i < starts1.size(); i++)
-                std::cout << starts1[i];
-            std::cout << std::endl;
-            auto unique_original_edges = sequence<std::pair<uintE, uintE>>(starts1.size()-1);
-
-            parallel_for(0, starts1.size() - 1, [&](size_t i){
-                unique_original_edges[i] = original_edges[starts1[i]];
-                std::cout << "Unique original edge: " << unique_original_edges[i].first
-                    << ", " << unique_original_edges[i].second << std::endl;
-            });
-
-            tree.batch_link(unique_original_edges, edge_table);
-            std::cout << "end current spanning tree" << std::endl;
-            //non_empty_spanning_tree = false;
+                // Original edges are guaranteed to be unique since representative edges are unique
+                tree.batch_link(original_edges, edge_table);
+            }
          }
     }
 
