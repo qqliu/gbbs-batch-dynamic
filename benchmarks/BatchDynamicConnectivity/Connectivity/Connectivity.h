@@ -173,8 +173,7 @@ struct Connectivity {
                 representative_edges[i] = std::make_pair(std::make_pair(ru, rv), i);
             });
             std::cout << "real edges size: " << real_edges.size() << std::endl;
-
-            // Somewhere later the number of unique edges becomes 0
+            std::cout << "representative edges size: " << representative_edges.size() << std::endl;
 
             auto compare_tup = [&] (const std::pair<std::pair<uintE, uintE>, uintE> l,
                     const std::pair<std::pair<uintE, uintE>,
@@ -186,9 +185,9 @@ struct Connectivity {
 
             auto unique_bool_seq = sequence<bool>(representative_edges.size());
             parallel_for(0, representative_edges.size(), [&](size_t i) {
-            bool_seq[i] = (i == 0) ||
-                ((representative_edges[i-1].first != representative_edges[i].first) ||
-                 (representative_edges[i-1].second != representative_edges[i].second));
+                unique_bool_seq[i] = ((i == 0) ||
+                    ((representative_edges[i-1].first != representative_edges[i].first) ||
+                    (representative_edges[i-1].second != representative_edges[i].second)));
             });
             auto unique_starts = parlay::pack_index(unique_bool_seq);
             auto unique_representative_edges = sequence<std::pair<uintE, uintE>>(unique_starts.size());
@@ -227,8 +226,8 @@ struct Connectivity {
 
             auto verts_bool_seq = sequence<bool>(verts.size());
             parallel_for(0, verts.size(), [&](size_t i) {
-            bool_seq[i] = ((i == 0) ||
-                (verts[i-1] != verts[i]));
+                verts_bool_seq[i] = ((i == 0) ||
+                    (verts[i-1] != verts[i]));
             });
             auto remapped_verts = parlay::pack_index(verts_bool_seq);
             auto original_to_remapped_verts = gbbs::make_sparse_table<uintE, uintE>(remapped_verts.size(),
