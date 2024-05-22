@@ -8,6 +8,8 @@ def create_id_mapping(file_path):
         for line in file:
             ids = line.split()
             id_set.update(ids)
+
+    print(len(id_set))
     # Create a mapping from ID to index
     return {id: index for index, id in enumerate(sorted(id_set))}
 

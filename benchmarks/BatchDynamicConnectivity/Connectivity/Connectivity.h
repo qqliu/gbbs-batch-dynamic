@@ -111,6 +111,7 @@ struct Connectivity {
                 });
             }
 
+            std::cout << "representative nodes size: " << representative_nodes.size() << std::endl;
             parlay::sort_inplace(parlay::make_slice(representative_nodes));
 
             auto bool_seq = sequence<bool>(representative_nodes.size());
@@ -123,6 +124,7 @@ struct Connectivity {
             sequence<std::pair<uintE, uintE>> found_possible_edges =
                     sequence<std::pair<uintE, uintE>>(representative_starts.size());
             sequence<bool> is_edge = sequence<bool>(representative_starts.size());
+            std::cout << "representative starts size: " << representative_starts.size() << std::endl;
 
             parallel_for(0, representative_starts.size(), [&](size_t i) {
                 auto representative_node = representative_nodes[representative_starts[i]];
@@ -170,6 +172,9 @@ struct Connectivity {
 
                 representative_edges[i] = std::make_pair(std::make_pair(ru, rv), i);
             });
+            std::cout << "real edges size: " << real_edges.size() << std::endl;
+
+            // Somewhere later the number of unique edges becomes 0
 
             auto compare_tup = [&] (const std::pair<std::pair<uintE, uintE>, uintE> l,
                     const std::pair<std::pair<uintE, uintE>,
@@ -190,6 +195,7 @@ struct Connectivity {
             auto unique_real_edges = sequence<std::pair<uintE, uintE>>(unique_starts.size());
 
             auto verts = sequence<uintE>(2 * unique_starts.size());
+            std::cout << "unique starts size: " << unique_starts.size() << std::endl;
 
             parallel_for(0, unique_starts.size(), [&](size_t i){
                 unique_representative_edges[i] = representative_edges[unique_starts[i]].first;
@@ -253,8 +259,10 @@ struct Connectivity {
                         remapped_v), unique_real_edges[i]), &abort);
             });
 
+            std::cout << "remapped edges size: " << remapped_edges.size() << std::endl;
 
             auto new_graph = sym_graph_from_edges(remapped_edges, remapped_verts.size());
+            std::cout << "new graph n: " << new_graph.n << ", new graph m: " << new_graph.m << std::endl;
 
             auto spanning_forest = workefficient_sf::SpanningForest(new_graph);
             if(spanning_forest.size() == 0)

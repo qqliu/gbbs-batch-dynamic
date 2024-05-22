@@ -417,6 +417,7 @@ struct ETTree {
     void add_edge_to_cutsets(std::pair<uintE, uintE> edge) {
         auto min_edge = std::min(edge.first, edge.second);
         auto max_edge = std::max(edge.first, edge.second);
+
         auto u = &vertices[edge.first];
 
         parallel_for(0, u->values[0].size(), [&](size_t ii) {
