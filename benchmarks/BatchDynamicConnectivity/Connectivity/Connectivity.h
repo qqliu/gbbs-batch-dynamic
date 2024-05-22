@@ -301,6 +301,8 @@ void RunConnectivityTest() {
 template <class W>
 inline void RunConnectivity(BatchDynamicEdges<W>& batch_edge_list, long batch_size, bool compare_exact,
         size_t offset, size_t n, int copies, size_t m, double pb) {
+
+        std::cout << "started running connectivity" << std::endl;
         auto cutset = Connectivity(n, copies, m, pb);
         auto batch = batch_edge_list.edges;
 
@@ -408,13 +410,16 @@ inline void RunConnectivity(BatchDynamicEdges<W>& batch_edge_list, long batch_si
                 return std::make_pair(vert1, vert2);
             });
 
+            std::cout << "started cutset insertions" << std::endl;
             cutset.batch_insertion(batch_insertions, edge_table, existence_table);
+            std::cout << "ended cutset insertions" << std::endl;
             cutset.batch_deletion(batch_deletions, edge_table, existence_table);
 
             sequence<int> correct = sequence<int>(batch_insertions.size(), false);
-             parallel_for(0, batch_insertions.size(), [&](size_t i) {
+            std::cout << "batch insertions size: " << batch_insertions.size() << std::endl;
+            parallel_for(0, batch_insertions.size(), [&](size_t i) {
                 correct[i] = cutset.is_connected(batch_insertions[i].first, batch_insertions[i].second);
-                //std::cout << "CONNECTED: " << correct[i] << std::endl;
+                std::cout << "CONNECTED: " << correct[i] << std::endl;
             });
             auto num_correct = parlay::scan_inplace(correct);
 

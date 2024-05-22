@@ -32,16 +32,19 @@
 namespace gbbs {
 template <class Graph>
 double Connectivity_runner(Graph& G, commandLine P) {
+  std::cout << "started connectivity runner" << std::endl;
   timer t; t.start();
   double tt = t.stop();
   using W = typename Graph::weight_type;
   const std::string kInputFlag{"-i"};
   const char* const input_file{P.getOptionValue(kInputFlag)};
 
+  std::cout << "reading edge list" << std::endl;
   bool use_dynamic = (input_file && input_file[0]);
   BatchDynamicEdges<W> batch_edge_list = use_dynamic ?
     read_batch_dynamic_edge_list<W>(input_file) : BatchDynamicEdges<W>{};
 
+  std::cout << "finished reading edge list" << std::endl;
   //RunConnectivity(batch_edge_list, 5, false, 0, 1140148, 50, 2787967, 1.5);
   RunConnectivity(batch_edge_list, 5, false, 0, 10, 50, 15, 1.5);
 
