@@ -207,7 +207,7 @@ struct ETTree {
 
         auto results = skip_list.batch_split(&filtered_splits);
 
-        parallel_for(0, filtered_splits.size(), [&] (size_t i) {
+        parallel_for(0, element_indices.size(), [&] (size_t i) {
             auto split_index = element_indices[i];
             split_successors[split_index] = results[i];
         });
