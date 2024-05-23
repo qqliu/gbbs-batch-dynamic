@@ -56,6 +56,7 @@ struct ETTree {
         if (index_uv == UINT_E_MAX || index_vu == UINT_E_MAX)
             std::cout << "THERE IS AN ERROR in edge_index_table" << std::endl;
 
+        auto output = edge_table[index_uv];
         edge_table[index_uv] = skip_list.create_node(u, nullptr, nullptr, make_values(0, 0, pb, copies, m), nullptr, false,
                 std::make_pair(u, v), pb, copies, m, 0);
         auto uv = &edge_table[index_uv];
@@ -460,7 +461,6 @@ struct ETTree {
 };
 
 void RunETTree(double pb, int copies, size_t m) {
-        std::cout << "ET tree" << std::endl;
         using K = std::pair<uintE, uintE>;
         using V = uintE;
         using KV = std::pair<K, V>;
