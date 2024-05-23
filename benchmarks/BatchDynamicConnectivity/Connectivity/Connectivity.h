@@ -258,8 +258,8 @@ struct Connectivity {
                     std::cout << "ERROR: unique edges have UINT_E_MAX error" << std::endl;
 
                 remapped_edges[i] = std::make_tuple(remapped_u, remapped_v, (uintE) 1);
-                representative_edge_to_original.insert_check(std::make_pair(std::make_pair(remapped_u,
-                        remapped_v), unique_real_edges[i]), &abort);
+                representative_edge_to_original.insert_check(std::make_pair(std::make_pair(std::min(remapped_u,
+                        remapped_v), std::max(remapped_u, remapped_v)), unique_real_edges[i]), &abort);
             });
 
             auto new_graph = sym_graph_from_edges(remapped_edges, remapped_verts.size());
@@ -275,8 +275,12 @@ struct Connectivity {
                     auto u = std::get<0>(spanning_forest[i]);
                     auto v = std::get<1>(spanning_forest[i]);
 
+                    auto first = std::min(u, v);
+                    auto second = std::max(u, v);
+                    std::cout << "u: " << u << ", v: " << v << std::endl;
+
                     if ((u != 0) || (v != 0)) {
-                        auto original_edge = representative_edge_to_original.find(std::make_pair(u, v),
+                        auto original_edge = representative_edge_to_original.find(std::make_pair(first, second),
                             std::make_pair(UINT_E_MAX, UINT_E_MAX));
 
                         if (original_edge.first == UINT_E_MAX || original_edge.second == UINT_E_MAX)
