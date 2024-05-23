@@ -46,7 +46,7 @@ double Connectivity_runner(Graph& G, commandLine P) {
 
   std::cout << "finished reading edge list" << std::endl;
   //RunConnectivity(batch_edge_list, 5, false, 0, 1140148, 50, 2787967, 1.5);
-  RunConnectivity(batch_edge_list, 1000, false, 0, 7115, 50, 15, 1.5);
+  RunConnectivity(batch_edge_list, 10000, false, 0, 7115, 50, 15, 1.5);
 
   std::cout << "### Running Time: " << tt << std::endl;
   return tt;

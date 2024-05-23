@@ -201,7 +201,7 @@ struct ETTree {
 
         auto element_indices = parlay::pack_index(bool_seq);
         auto filtered_splits = sequence<SkipList::SkipListElement*>(element_indices.size());
-        parallel_for(0, filtered_splits.size(), [&] (size_t i) {
+        parallel_for(0, element_indices.size(), [&] (size_t i) {
             filtered_splits[i] = splits[element_indices[i]];
         });
 
@@ -219,12 +219,16 @@ struct ETTree {
 
         auto joins = sequence<std::pair<SkipList::SkipListElement*, SkipList::SkipListElement*>>(2 * links.size(),
                 std::make_pair(nullptr, nullptr));
-        parallel_for(0, 2 * links.size(), [&] (size_t i) {
+
+        std::cout << "starting to make joins" << std::endl;
+        parallel_for(0, links.size(), [&] (size_t i) {
             uintE u, v;
             u = links_both_dirs[i].first;
             v = links_both_dirs[i].second;
 
             auto index_uv = edge_index_table.find(std::make_pair(u, v), UINT_E_MAX);
+
+            std::cout << "looking in index table" << std::endl;
             if (index_uv == UINT_E_MAX)
                 std::cout << "This is an error in edge_index_table in recursive insertions" << std::endl;
 
