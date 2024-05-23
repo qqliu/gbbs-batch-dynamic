@@ -431,8 +431,14 @@ struct SkipList {
                 join_left_sizes[i] = std::make_pair(joins_ref[i].first, joins_ref[i].first->size[0]);
             });
 
+            std::cout << "finished skip list batch join" << std::endl;
+
             batch_update_xor(&join_lefts);
+
+            std::cout << "finished skip list update xor" << std::endl;
             batch_update_sum(&join_left_sizes);
+
+            std::cout << "finisehd skip list sum" << std::endl;
     }
 
     sequence<SkipListElement*> batch_split(sequence<SkipListElement*>* splits) {

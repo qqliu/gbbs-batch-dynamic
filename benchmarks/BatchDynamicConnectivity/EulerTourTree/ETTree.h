@@ -131,9 +131,11 @@ struct ETTree {
     template <class KY, class VL, class HH>
     void batch_link_sequential(sequence<std::pair<uintE, uintE>>& links,
             gbbs::sparse_table<KY, VL, HH>& edge_index_table) {
+            std::cout << "started link sequential" << std::endl;
             for(size_t i = 0; i < links.size(); i++) {
                 link(links[i].first, links[i].second, edge_index_table);
             }
+            std::cout << "ended link sequential" << std::endl;
     }
 
     template <class KY, class VL, class HH>
@@ -143,17 +145,23 @@ struct ETTree {
                 return;
         }
 
+        std::cout << "started batch links" << std::endl;
+
         sequence<std::pair<uintE, uintE>> links_both_dirs = sequence<std::pair<uintE, uintE>>(2 * links.size());
         parallel_for(0, links.size(), [&] (size_t i) {
                 links_both_dirs[2 * i] = links[i];
                 links_both_dirs[2 * i + 1] = std::make_pair(links[i].second, links[i].first);
         });
 
+        std::cout << "ended links both directions" << std::endl;
+
         auto get_key = [&] (const std::pair<uintE, uintE>& elm) { return elm.first; };
         parlay::integer_sort_inplace(parlay::make_slice(links_both_dirs), get_key);
 
         auto split_successors = sequence<SkipList::SkipListElement*>(2 * links.size());
         auto splits = sequence<SkipList::SkipListElement*>(2 * links.size(), nullptr);
+
+        std::cout << "splits created" << std::endl;
 
         parallel_for(0, 2 * links.size(), [&] (size_t i) {
             uintE u, v;
@@ -185,6 +193,8 @@ struct ETTree {
             }
         });
 
+        std::cout << "splits ended" << std::endl;
+
         auto bool_seq = parlay::delayed_seq<bool>(splits.size(), [&] (size_t i) {
                 return (splits[i] != nullptr);
         });
@@ -201,6 +211,8 @@ struct ETTree {
             auto split_index = element_indices[i];
             split_successors[split_index] = results[i];
         });
+
+        std::cout << "filtered splits ended" << std::endl;
 
         // If x has new neighbors y_1, y_2, ..., y_k, join (x, x) to (x, y_1). Join
         // (y_i,x) to (x, y_{i+1}) for each i < k. Join (y_k, x) to succ(x)
@@ -240,6 +252,8 @@ struct ETTree {
             }
         });
 
+        std::cout << "joins created" << std::endl;
+
         sequence<std::pair<SkipList::SkipListElement*, SkipList::SkipListElement*>> filtered =
             parlay::filter(joins, [&] (const std::pair<SkipList::SkipListElement*, SkipList::SkipListElement*>& e) {
 
@@ -248,7 +262,9 @@ struct ETTree {
                 return e.first != nullptr && e.second != nullptr;
             });
 
+        std::cout << "batch joins created" << std::endl;
         skip_list.batch_join(&filtered);
+        std::cout << "batch joins ended" << std::endl;
     }
 
     template <class KY, class VL, class HH>
