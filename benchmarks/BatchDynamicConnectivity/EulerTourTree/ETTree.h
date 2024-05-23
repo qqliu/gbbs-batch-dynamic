@@ -202,10 +202,16 @@ struct ETTree {
         auto element_indices = parlay::pack_index(bool_seq);
         auto filtered_splits = sequence<SkipList::SkipListElement*>(element_indices.size());
         parallel_for(0, element_indices.size(), [&] (size_t i) {
+            if (splits[element_indices[i]] == nullptr)
+                std::cout << "ERROR: issue with filtered splits" << std::endl;
             filtered_splits[i] = splits[element_indices[i]];
         });
 
+        std::cout << "start filtered splits" << std::endl;
+
         auto results = skip_list.batch_split(&filtered_splits);
+
+        std::cout << "end filtered splits" << std::endl;
 
         parallel_for(0, element_indices.size(), [&] (size_t i) {
             auto split_index = element_indices[i];
