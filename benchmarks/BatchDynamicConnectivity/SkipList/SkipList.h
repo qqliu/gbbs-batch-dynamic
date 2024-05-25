@@ -137,11 +137,15 @@ struct SkipList {
             SkipListElement* start_element = this_element;
             if (cur_element->height > level + 1)
                 return cur_element;
+
+            std::cout << "neighbors size: " << cur_element->neighbors.size() << std::endl;
             cur_element = cur_element->neighbors[level].first;
+            std::cout << "cur_element: " << cur_element << std::endl;
 
             while (cur_element != nullptr && cur_element != start_element) {
                 if (cur_element->height > level + 1)
                     return cur_element;
+                std::cout << "cur element neighbor height" << cur_element->neighbors.size() << std::endl;
                 cur_element = cur_element->neighbors[level].first;
             }
             return nullptr;
@@ -217,6 +221,7 @@ struct SkipList {
 
             std::cout << "start split" << std::endl;
             while(cur_element != nullptr) {
+                std::cout << "before neighbor" << std::endl;
                 SkipListElement* next = cur_element->neighbors[level].second;
                 std::cout << "neighbor" << std::endl;
                 if (next != nullptr &&
@@ -224,13 +229,22 @@ struct SkipList {
                         if (level == 0) {
                            successor = next;
                         }
+
+                        std::cout << "successor" << std::endl;
+
                         next->CASleft(level, cur_element, nullptr);
+
+                        std::cout << "cas left: " << level << ", " << cur_element << std::endl;
+
                         cur_element = find_left_parent(level, cur_element);
+
+                        std::cout << "left parent" << std::endl;
                         level++;
                }
                else {
                         break;
                }
+               std::cout << "after neighbor" << std::endl;
             }
             std::cout << "end split" << std::endl;
             return successor;

@@ -178,8 +178,11 @@ struct Connectivity {
             auto representative_to_real = gbbs::make_sparse_table<std::pair<uintE, uintE>, size_t>(real_edges.size(),
                 rep_empty, rep_hash);
 
-            auto representative_edges = sequence<std::pair<uintE, uintE>>(real_edges.size(), std::make_pair(UINT_E_MAX,
+            auto potential_representative_edges = sequence<std::pair<uintE, uintE>>(real_edges.size(),
+                    std::make_pair(UINT_E_MAX,
                         UINT_E_MAX));
+
+            auto different_trees = sequence<bool>(real_edges.size(), false);
 
             parallel_for(0, real_edges.size(), [&](size_t i) {
                 auto u = tree.vertices[real_edges[i].first];
@@ -193,20 +196,28 @@ struct Connectivity {
                 auto ru = std::min(node_a_id, node_b_id);
                 auto rv = std::max(node_a_id, node_b_id);
 
-                if (ru == rv)
-                    std::cout << "ERROR: found edge in the same tree" << std::endl;
+                if (ru != rv) {
+                    if (ru == rv)
+                        std::cout << "ERROR: found edge in the same tree" << std::endl;
+                    different_trees[i] = true;
+                    potential_representative_edges[i] = std::make_pair((uintE)ru, (uintE)rv);
+                }
 
                 if (ru == UINT_E_MAX || rv == UINT_E_MAX)
                     std::cout << "ERROR: wrong indices found" << std::endl;
-
-                representative_edges[i] = std::make_pair((uintE)ru, (uintE)rv);
-                representative_to_real.insert_check(std::make_pair(representative_edges[i], i), &abort);
             });
 
             abort = false;
-            std::cout << "got new representative edges: " << representative_edges.size() << std::endl;
+            std::cout << "got new representative edges: " << potential_representative_edges.size() << std::endl;
+
+            auto representative_edges = parlay::pack(potential_representative_edges, different_trees);
+            parallel_for(0, representative_edges.size(), [&](size_t i) {
+                representative_to_real.insert_check(std::make_pair(representative_edges[i], i), &abort);
+            });
+
             for (size_t i = 0; i < representative_edges.size(); i++) {
-                    std::cout << representative_edges[i].first << ", " << representative_edges[i].second
+                    std::cout << representative_edges[i].first << ", "
+                        << representative_edges[i].second
                         << std::endl;
             }
 
@@ -235,6 +246,8 @@ struct Connectivity {
 
             parallel_for(0, unique_starts.size(), [&](size_t i){
                 unique_representative_edges[i] = representative_edges[unique_starts[i]];
+                std::cout << "rep edge: " << unique_representative_edges[i].first << ", " <<
+                    representative_edges[i].second << std::endl;
                 auto real_index = representative_to_real.find(representative_edges[unique_starts[i]], UINT_E_MAX);
 
                 if (real_index == UINT_E_MAX)

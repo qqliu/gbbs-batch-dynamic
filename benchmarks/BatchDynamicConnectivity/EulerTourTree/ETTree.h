@@ -208,6 +208,8 @@ struct ETTree {
         });
 
         std::cout << "start filtered splits" << std::endl;
+        for (size_t i = 0; i < filtered_splits.size(); i++)
+            std::cout << "split: " << filtered_splits[i] << std::endl;
 
         auto results = skip_list.batch_split(&filtered_splits);
 
@@ -267,7 +269,7 @@ struct ETTree {
         sequence<std::pair<SkipList::SkipListElement*, SkipList::SkipListElement*>> filtered =
             parlay::filter(joins, [&] (const std::pair<SkipList::SkipListElement*, SkipList::SkipListElement*>& e) {
 
-                if ((e.first == nullptr && e.second != nullptr) || (e.first != nullptr && e.second != nullptr))
+                if ((e.first == nullptr && e.second != nullptr) || (e.first != nullptr && e.second == nullptr))
                     std::cout << "ERROR: join error nullptr" << std::endl;
                 return e.first != nullptr && e.second != nullptr;
             });
