@@ -145,9 +145,11 @@ struct SkipList {
             while (cur_element != nullptr && cur_element != start_element) {
                 if (cur_element->height > level + 1)
                     return cur_element;
-                std::cout << "cur element neighbor height" << cur_element->neighbors.size() << std::endl;
+                std::cout << "cur element neighbor height " << cur_element->neighbors.size()
+                    << ", level: " << level << std::endl;
                 cur_element = cur_element->neighbors[level].first;
             }
+            std::cout << "finished find left parent" << std::endl;
             return nullptr;
     }
 
