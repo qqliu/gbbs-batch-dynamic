@@ -131,11 +131,9 @@ struct ETTree {
     template <class KY, class VL, class HH>
     void batch_link_sequential(sequence<std::pair<uintE, uintE>>& links,
             gbbs::sparse_table<KY, VL, HH>& edge_index_table) {
-            std::cout << "started link sequential" << std::endl;
             for(size_t i = 0; i < links.size(); i++) {
                 link(links[i].first, links[i].second, edge_index_table);
             }
-            std::cout << "ended link sequential" << std::endl;
     }
 
     template <class KY, class VL, class HH>
@@ -145,23 +143,17 @@ struct ETTree {
                 return;
         }
 
-        std::cout << "started batch links" << std::endl;
-
         sequence<std::pair<uintE, uintE>> links_both_dirs = sequence<std::pair<uintE, uintE>>(2 * links.size());
         parallel_for(0, links.size(), [&] (size_t i) {
                 links_both_dirs[2 * i] = links[i];
                 links_both_dirs[2 * i + 1] = std::make_pair(links[i].second, links[i].first);
         });
 
-        std::cout << "ended links both directions" << std::endl;
-
         auto get_key = [&] (const std::pair<uintE, uintE>& elm) { return elm.first; };
         parlay::integer_sort_inplace(parlay::make_slice(links_both_dirs), get_key);
 
         auto split_successors = sequence<SkipList::SkipListElement*>(2 * links.size());
         auto splits = sequence<SkipList::SkipListElement*>(2 * links.size(), nullptr);
-
-        std::cout << "splits created" << std::endl;
 
         parallel_for(0, 2 * links.size(), [&] (size_t i) {
             uintE u, v;
@@ -193,8 +185,6 @@ struct ETTree {
             }
         });
 
-        std::cout << "splits ended" << std::endl;
-
         auto bool_seq = parlay::delayed_seq<bool>(splits.size(), [&] (size_t i) {
                 return (splits[i] != nullptr);
         });
@@ -207,36 +197,26 @@ struct ETTree {
             filtered_splits[i] = splits[element_indices[i]];
         });
 
-        std::cout << "start filtered splits" << std::endl;
-        for (size_t i = 0; i < filtered_splits.size(); i++)
-            std::cout << "split: " << filtered_splits[i] << std::endl;
-
         auto results = skip_list.batch_split(&filtered_splits);
-
-        std::cout << "end filtered splits" << std::endl;
 
         parallel_for(0, element_indices.size(), [&] (size_t i) {
             auto split_index = element_indices[i];
             split_successors[split_index] = results[i];
         });
 
-        std::cout << "filtered splits ended" << std::endl;
-
         // If x has new neighbors y_1, y_2, ..., y_k, join (x, x) to (x, y_1). Join
         // (y_i,x) to (x, y_{i+1}) for each i < k. Join (y_k, x) to succ(x)
 
-        auto joins = sequence<std::pair<SkipList::SkipListElement*, SkipList::SkipListElement*>>(2 * links.size(),
+        auto joins = sequence<std::pair<SkipList::SkipListElement*, SkipList::SkipListElement*>>(4 * links.size(),
                 std::make_pair(nullptr, nullptr));
 
-        std::cout << "starting to make joins" << std::endl;
-        parallel_for(0, links.size(), [&] (size_t i) {
+        parallel_for(0, 2 * links.size(), [&] (size_t i) {
             uintE u, v;
             u = links_both_dirs[i].first;
             v = links_both_dirs[i].second;
 
             auto index_uv = edge_index_table.find(std::make_pair(u, v), UINT_E_MAX);
 
-            std::cout << "looking in index table" << std::endl;
             if (index_uv == UINT_E_MAX)
                 std::cout << "This is an error in edge_index_table in recursive insertions" << std::endl;
 
@@ -264,8 +244,6 @@ struct ETTree {
             }
         });
 
-        std::cout << "joins created" << std::endl;
-
         sequence<std::pair<SkipList::SkipListElement*, SkipList::SkipListElement*>> filtered =
             parlay::filter(joins, [&] (const std::pair<SkipList::SkipListElement*, SkipList::SkipListElement*>& e) {
 
@@ -274,9 +252,7 @@ struct ETTree {
                 return e.first != nullptr && e.second != nullptr;
             });
 
-        std::cout << "batch joins created" << std::endl;
         skip_list.batch_join(&filtered);
-        std::cout << "batch joins ended" << std::endl;
     }
 
     template <class KY, class VL, class HH>

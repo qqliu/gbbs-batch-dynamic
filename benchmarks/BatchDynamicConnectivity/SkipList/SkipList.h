@@ -138,18 +138,13 @@ struct SkipList {
             if (cur_element->height > level + 1)
                 return cur_element;
 
-            std::cout << "neighbors size: " << cur_element->neighbors.size() << std::endl;
             cur_element = cur_element->neighbors[level].first;
-            std::cout << "cur_element: " << cur_element << std::endl;
 
             while (cur_element != nullptr && cur_element != start_element) {
                 if (cur_element->height > level + 1)
                     return cur_element;
-                std::cout << "cur element neighbor height " << cur_element->neighbors.size()
-                    << ", level: " << level << std::endl;
                 cur_element = cur_element->neighbors[level].first;
             }
-            std::cout << "finished find left parent" << std::endl;
             return nullptr;
     }
 
@@ -221,34 +216,22 @@ struct SkipList {
 
             size_t level = 0;
 
-            std::cout << "start split" << std::endl;
             while(cur_element != nullptr) {
-                std::cout << "before neighbor" << std::endl;
                 SkipListElement* next = cur_element->neighbors[level].second;
-                std::cout << "neighbor" << std::endl;
                 if (next != nullptr &&
                         cur_element->CASright(level, next, nullptr)) {
                         if (level == 0) {
                            successor = next;
                         }
 
-                        std::cout << "successor" << std::endl;
-
                         next->CASleft(level, cur_element, nullptr);
-
-                        std::cout << "cas left: " << level << ", " << cur_element << std::endl;
-
                         cur_element = find_left_parent(level, cur_element);
-
-                        std::cout << "left parent" << std::endl;
                         level++;
                }
                else {
                         break;
                }
-               std::cout << "after neighbor" << std::endl;
             }
-            std::cout << "end split" << std::endl;
             return successor;
     }
 
@@ -450,25 +433,16 @@ struct SkipList {
                 join_left_sizes[i] = std::make_pair(joins_ref[i].first, joins_ref[i].first->size[0]);
             });
 
-            std::cout << "finished skip list batch join" << std::endl;
-
             batch_update_xor(&join_lefts);
-
-            std::cout << "finished skip list update xor" << std::endl;
             batch_update_sum(&join_left_sizes);
-
-            std::cout << "finisehd skip list sum" << std::endl;
     }
 
     sequence<SkipListElement*> batch_split(sequence<SkipListElement*>* splits) {
-            std::cout << "start batch split" << std::endl;
             sequence<SkipListElement*>& splits_ref = *splits;
             sequence<SkipListElement*> results = sequence<SkipListElement*>(splits->size());
             parallel_for(0, splits->size(), [&](size_t i){
                 results[i] = split(splits_ref[i]);
             });
-
-            std::cout << "ended creating results" << std::endl;
 
             // Perform updates but only if some other thread hasn't already performed the update
             parallel_for(0, splits->size(), [&](size_t i){
@@ -476,8 +450,6 @@ struct SkipList {
                 bool can_proceed = (curr->update_level_xor == UINT_E_MAX) && (curr->update_level_sum == UINT_E_MAX)
                     && gbbs::atomic_compare_and_swap(&curr->update_level_xor, UINT_E_MAX, (uintE)0)
                     && gbbs::atomic_compare_and_swap(&curr->update_level_sum, UINT_E_MAX, (uintE)0);
-
-                std::cout << "can proceed" << std::endl;
 
                 if (can_proceed) {
                     sequence<sequence<std::pair<uintE, uintE>>> xor_sums = curr->values[0];
@@ -493,14 +465,12 @@ struct SkipList {
                             if (curr == nullptr) {
                                 break;
                             } else {
-                                std::cout << "xor sums" << std::endl;
                                 parallel_for(0, xor_sums.size(), [&](size_t ii) {
                                         parallel_for(0, xor_sums[ii].size(), [&](size_t ij) {
                                             xor_sums[ii][ij].first ^= curr->values[level][ii][ij].first;
                                             xor_sums[ii][ij].second ^= curr->values[level][ii][ij].second;
                                         });
                                 });
-                                std::cout << "end xor sums" << std::endl;
 
                                 old_size -= curr->size[level];
                             }
@@ -509,14 +479,11 @@ struct SkipList {
                 }
             });
 
-            std::cout << "ended splits" << std::endl;
-
             parallel_for(0, splits->size(), [&](size_t i) {
                 splits_ref[i]->update_level_xor = UINT_E_MAX;
                 splits_ref[i]->update_level_sum = UINT_E_MAX;
             });
 
-            std::cout << "ended updating refs" << std::endl;
             return results;
     }
 

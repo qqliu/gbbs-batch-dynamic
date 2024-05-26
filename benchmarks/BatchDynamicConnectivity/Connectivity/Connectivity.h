@@ -112,8 +112,6 @@ struct Connectivity {
                 });
             }
 
-            std::cout << "sorting new representative nodes" << std::endl;
-
             parlay::sort_inplace(parlay::make_slice(representative_nodes));
 
             auto bool_seq = sequence<bool>(representative_nodes.size());
@@ -122,7 +120,6 @@ struct Connectivity {
                        (edges_both_directions[i-1] != edges_both_directions[i]);
             });
             auto representative_starts = parlay::pack_index(bool_seq);
-            std::cout << "got new representative starts" << std::endl;
 
             sequence<std::pair<uintE, uintE>> found_possible_edges =
                     sequence<std::pair<uintE, uintE>>(representative_starts.size());
@@ -160,7 +157,6 @@ struct Connectivity {
 
                 is_edge[i] = is_real_edge;
             });
-            std::cout << "got new real edges" << std::endl;
 
             auto real_edges = parlay::pack(found_possible_edges, is_edge);
 
@@ -208,26 +204,17 @@ struct Connectivity {
             });
 
             abort = false;
-            std::cout << "got new representative edges: " << potential_representative_edges.size() << std::endl;
 
             auto representative_edges = parlay::pack(potential_representative_edges, different_trees);
             parallel_for(0, representative_edges.size(), [&](size_t i) {
                 representative_to_real.insert_check(std::make_pair(representative_edges[i], i), &abort);
             });
 
-            for (size_t i = 0; i < representative_edges.size(); i++) {
-                    std::cout << representative_edges[i].first << ", "
-                        << representative_edges[i].second
-                        << std::endl;
-            }
-
-            std::cout << "finished printing out values" << std::endl;
 
             auto get_key = [&] (const std::pair<uintE, uintE> l) {
                 return l.first;
             };
             parlay::integer_sort_inplace(make_slice(representative_edges), get_key);
-            std::cout << "sorting new representative edges" << std::endl;
 
             auto unique_bool_seq = sequence<bool>(representative_edges.size());
             parallel_for(0, representative_edges.size(), [&](size_t i) {
@@ -235,19 +222,14 @@ struct Connectivity {
                     ((representative_edges[i-1].first != representative_edges[i].first) ||
                     (representative_edges[i-1].second != representative_edges[i].second)));
             });
-            std::cout << "pack unique real edges" << std::endl;
             auto unique_starts = parlay::pack_index(unique_bool_seq);
-            std::cout << "finished pack unique real edges" << std::endl;
             auto unique_representative_edges = sequence<std::pair<uintE, uintE>>(unique_starts.size());
             auto unique_real_edges = sequence<std::pair<uintE, uintE>>(unique_starts.size());
-            std::cout << "got new unique real edges" << std::endl;
 
             auto verts = sequence<uintE>(2 * unique_starts.size());
 
             parallel_for(0, unique_starts.size(), [&](size_t i){
                 unique_representative_edges[i] = representative_edges[unique_starts[i]];
-                std::cout << "rep edge: " << unique_representative_edges[i].first << ", " <<
-                    representative_edges[i].second << std::endl;
                 auto real_index = representative_to_real.find(representative_edges[unique_starts[i]], UINT_E_MAX);
 
                 if (real_index == UINT_E_MAX)
@@ -268,7 +250,6 @@ struct Connectivity {
                     size_t key = (l << 32) + r;
                 return parlay::hash64_2(key);
             };
-            std::cout << "got new verts" << std::endl;
 
             std::pair<uintE, uintE> vert_empty = std::make_pair(UINT_E_MAX, UINT_E_MAX);
             auto vert_hash = [](const uintE& t){
@@ -279,7 +260,6 @@ struct Connectivity {
                 gbbs::make_sparse_table<K, V_pairs>(unique_representative_edges.size(), empty, hash_pair);
 
             parlay::sort_inplace(parlay::make_slice(verts));
-            std::cout << "sorted new verts" << std::endl;
 
             auto verts_bool_seq = sequence<bool>(verts.size());
             parallel_for(0, verts.size(), [&](size_t i) {
@@ -293,7 +273,6 @@ struct Connectivity {
             parallel_for(0, remapped_verts.size(), [&] (size_t i){
                 original_to_remapped_verts.insert_check(std::make_pair(verts[remapped_verts[i]], i), &abort);
             });
-            std::cout << "got new remapped verts" << std::endl;
 
             auto remapped_edges = sequence<std::tuple<uintE, uintE, uintE>>(unique_representative_edges.size());
 
@@ -313,14 +292,11 @@ struct Connectivity {
                 if (unique_real_edges[i].first == UINT_E_MAX || unique_real_edges[i].second == UINT_E_MAX)
                     std::cout << "ERROR: unique edges have UINT_E_MAX error" << std::endl;
 
-                std::cout << "create tuple" << std::endl;
                 remapped_edges[i] = std::make_tuple(remapped_u, remapped_v, (uintE) 1);
-                std::cout << "ended make tuple" << std::endl;
 
                 representative_edge_to_original.insert_check(std::make_pair(std::make_pair(std::min(remapped_u,
                         remapped_v), std::max(remapped_u, remapped_v)), unique_real_edges[i]), &abort);
             });
-            std::cout << "got new remapped edges" << std::endl;
 
             auto new_graph = sym_graph_from_edges(remapped_edges, remapped_verts.size());
 
@@ -337,7 +313,6 @@ struct Connectivity {
 
                     auto first = std::min(u, v);
                     auto second = std::max(u, v);
-                    std::cout << "u: " << u << ", v: " << v << std::endl;
 
                     if ((u != 0) || (v != 0)) {
                         auto original_edge = representative_edge_to_original.find(std::make_pair(first, second),
@@ -356,7 +331,6 @@ struct Connectivity {
 
                 // Original edges are guaranteed to be unique since representative edges are unique
                 tree.batch_link(to_link_edges, edge_table);
-                std::cout << "ended current round" << std::endl;
             }
          }
     }
@@ -382,7 +356,6 @@ template <class W>
 inline void RunConnectivity(BatchDynamicEdges<W>& batch_edge_list, long batch_size, bool compare_exact,
         size_t offset, size_t n, int copies, size_t m, double pb) {
 
-        std::cout << "started running connectivity" << std::endl;
         auto batch = batch_edge_list.edges;
         auto cutset = Connectivity(n, copies, batch.size(), pb);
 
@@ -492,6 +465,8 @@ inline void RunConnectivity(BatchDynamicEdges<W>& batch_edge_list, long batch_si
 
             cutset.batch_insertion(batch_insertions, edge_table, existence_table);
             cutset.batch_deletion(batch_deletions, edge_table, existence_table);
+            auto runtime = t.stop();
+            std::cout << "runtime: " << runtime << std::endl;
 
             sequence<int> correct = sequence<int>(batch_insertions.size(), false);
             parallel_for(0, batch_insertions.size(), [&](size_t i) {
