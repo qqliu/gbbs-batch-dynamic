@@ -355,17 +355,22 @@ struct Connectivity {
         while(non_empty_spanning_tree) {
             if (first) {
                 edges_both_directions =  sequence<std::pair<uintE, uintE>>(2 * deletions.size());
-                auto split_edges = sequence<std::pair<uintE, uintE>>(deletions.size(), std::make_pair(UINT_E_MAX,
-                            UINT_E_MAX));
+                auto split_edges = sequence<SkipList::SkipListElement*>(deletions.size(), nullptr);
+                auto is_split_edge = sequence<bool>(deletions.size(), false);
 
                 parallel_for(0, deletions.size(), [&](size_t i) {
                     auto [u, v] = deletions[i];
                     edges_both_directions[2 * i] = std::make_pair(u, v);
                     edges_both_directions[2 * i + 1] = std::make_pair(v, u);
 
-                    // I am here.
                     auto edge_index = edge_table.find(std::make_pair(u, v), UINT_E_MAX);
+                    if (edge_index != UINT_E_MAX && tree.edge_table[edge_index].twin != nullptr) {
+                        is_split_edge[i] = true;
+                        split_edges[i] = &tree.edge_table[edge_index];
+                    }
                 });
+
+                auto edges_to_split = parlay::pack(split_edges, is_split_edge);
 
                 auto compare_tup = [&] (const std::pair<uintE, uintE> l, const std::pair<uintE, uintE> r) {
                     return l.first < r.first;
@@ -399,7 +404,7 @@ struct Connectivity {
                     update_seq[i] = std::make_pair(our_vertex, our_vertex->values[0]);
                 });
 
-                tree.skip_list.batch_update_xor(&update_seq);
+                tree.skip_list.batch_split(&edges_to_split);
             }
             first = false;
 
