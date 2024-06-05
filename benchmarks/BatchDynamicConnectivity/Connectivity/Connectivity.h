@@ -386,11 +386,6 @@ struct Connectivity {
 
                 representative_nodes =
                     sequence<SkipList::SkipListElement*>(starts.size()-1);
-                sequence<SkipList::SkipListElement*> nodes_to_update =
-                    sequence<SkipList::SkipListElement*>(starts.size()-1);
-                auto update_seq =
-                    sequence<std::pair<SkipList::SkipListElement*,
-                    sequence<sequence<std::pair<uintE, uintE>>>>>(starts.size()- 1);
 
                 parallel_for(0, starts.size() - 1, [&](size_t i) {
                     // update j's cutset data structure; need to be sequential because accessing same arrays
@@ -401,7 +396,6 @@ struct Connectivity {
                     SkipList::SkipListElement* our_vertex = &tree.vertices[edges_both_directions[starts[i]].first];
                     representative_nodes[i] =
                         tree.skip_list.find_representative(our_vertex);
-                    update_seq[i] = std::make_pair(our_vertex, our_vertex->values[0]);
                 });
 
                 tree.skip_list.batch_split(&edges_to_split);
