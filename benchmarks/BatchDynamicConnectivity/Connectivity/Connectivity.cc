@@ -44,9 +44,21 @@ double Connectivity_runner(Graph& G, commandLine P) {
   BatchDynamicEdges<W> batch_edge_list = use_dynamic ?
     read_batch_dynamic_edge_list<W>(input_file) : BatchDynamicEdges<W>{};
 
+  // Options not exposed to general users
+  const char* const init_graph_file(P.getOptionValue("-init_graph_file"));
+
+  // Prepend the initial graph if specified, and store the offset of the
+  // initial graph in the resulting dynamic edges list
+  size_t offset = 0;
+  if (use_dynamic && init_graph_file) {
+    BatchDynamicEdges<W> init_graph_list =
+      read_batch_dynamic_edge_list<W>(init_graph_file);
+    offset = prepend_dynamic_edge_list(batch_edge_list, init_graph_list);
+  }
+
   std::cout << "finished reading edge list" << std::endl;
   //RunConnectivity(batch_edge_list, 5, false, 0, 1140148, 50, 2787967, 1.5);
-  RunConnectivity(batch_edge_list, 100000, false, 0, 7115, 50, 15, 1.5);
+  RunConnectivity(batch_edge_list, 100000, false, offset, 7115, 50, 15, 1.5);
 
   std::cout << "### Running Time: " << tt << std::endl;
   return tt;
