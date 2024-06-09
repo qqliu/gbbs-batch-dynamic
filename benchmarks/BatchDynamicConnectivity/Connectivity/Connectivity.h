@@ -696,6 +696,8 @@ inline void RunConnectivity(BatchDynamicEdges<W>& batch_edge_list, long batch_si
                     return std::make_pair(vert1, vert2);
                 });
 
+                cutset.batch_insertion(batch_insertions, edge_table, existence_table);
+
                 auto batch_deletions = parlay::delayed_seq<std::pair<uintE, uintE>>(deletions.size(),
                 [&] (size_t i) {
                     uintE vert1 = deletions[i].from;
@@ -709,7 +711,6 @@ inline void RunConnectivity(BatchDynamicEdges<W>& batch_edge_list, long batch_si
                     return std::make_pair(vert1, vert2);
                 });
 
-                cutset.batch_insertion(batch_insertions, edge_table, existence_table);
                 cutset.batch_deletion(batch_deletions, edge_table, existence_table);
             }
         }
@@ -741,6 +742,8 @@ inline void RunConnectivity(BatchDynamicEdges<W>& batch_edge_list, long batch_si
                 return std::make_pair(vert1, vert2);
             });
 
+            cutset.batch_insertion(batch_insertions, edge_table, existence_table);
+
             auto batch_deletions = parlay::delayed_seq<std::pair<uintE, uintE>>(deletions.size(),
                 [&] (size_t i) {
                 uintE vert1 = deletions[i].from;
@@ -753,10 +756,6 @@ inline void RunConnectivity(BatchDynamicEdges<W>& batch_edge_list, long batch_si
 
                 return std::make_pair(vert1, vert2);
             });
-
-            cutset.batch_insertion(batch_insertions, edge_table, existence_table);
-
-            std::cout << "ended batch insertions" << std::endl;
 
             cutset.batch_deletion(batch_deletions, edge_table, existence_table);
             auto runtime = t.stop();
