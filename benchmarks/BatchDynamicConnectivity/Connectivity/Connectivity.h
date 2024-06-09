@@ -353,6 +353,7 @@ struct Connectivity {
         bool abort = false;
 
         while(non_empty_spanning_tree) {
+            std::cout << "started round" << std::endl;
             if (first) {
                 edges_both_directions =  sequence<std::pair<uintE, uintE>>(2 * deletions.size());
                 auto split_edges = sequence<SkipList::SkipListElement*>(deletions.size(), nullptr);
@@ -400,6 +401,8 @@ struct Connectivity {
 
                 tree.skip_list.batch_split(&edges_to_split);
             }
+
+            std::cout << "finished first" << std::endl;
             first = false;
 
             if (!first) {
@@ -411,6 +414,7 @@ struct Connectivity {
             }
 
             parlay::sort_inplace(parlay::make_slice(representative_nodes));
+            std::cout << "finished sort representative nodes" << std::endl;
 
             auto bool_seq = sequence<bool>(representative_nodes.size());
             parallel_for(0, representative_nodes.size(), [&](size_t i) {
@@ -418,6 +422,7 @@ struct Connectivity {
                        (edges_both_directions[i-1] != edges_both_directions[i]);
             });
             auto representative_starts = parlay::pack_index(bool_seq);
+            std::cout << "finished representative starts" << std::endl;
 
             sequence<std::pair<uintE, uintE>> found_possible_edges =
                     sequence<std::pair<uintE, uintE>>(representative_starts.size());
@@ -749,6 +754,9 @@ inline void RunConnectivity(BatchDynamicEdges<W>& batch_edge_list, long batch_si
             });
 
             cutset.batch_insertion(batch_insertions, edge_table, existence_table);
+
+            std::cout << "ended batch insertions" << std::endl;
+
             cutset.batch_deletion(batch_deletions, edge_table, existence_table);
             auto runtime = t.stop();
             std::cout << "runtime: " << runtime << std::endl;
