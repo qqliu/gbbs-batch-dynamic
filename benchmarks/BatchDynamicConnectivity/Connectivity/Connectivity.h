@@ -403,6 +403,7 @@ struct Connectivity {
                         tree.skip_list.find_representative(our_vertex);
                 });
 
+                // segfault occurs in some runs
                 tree.batch_cut(edges_to_split, edge_table);
             }
 
