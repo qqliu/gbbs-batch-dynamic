@@ -366,7 +366,13 @@ struct Connectivity {
                     edges_both_directions[2 * i + 1] = std::make_pair(v, u);
 
                     auto edge_index = edge_table.find(std::make_pair(u, v), UINT_E_MAX);
-                    if (edge_index != UINT_E_MAX && tree.edge_table[edge_index].twin != nullptr) {
+
+                    if (edge_index == UINT_E_MAX)
+                        std::cout << "ERROR: edge table doesn't return correct index" << std::endl;
+
+                    if (edge_index != UINT_E_MAX && tree.edge_table[edge_index].twin != nullptr
+                            && tree.edge_table[edge_index].id.first != UINT_E_MAX
+                            && tree.edge_table[edge_index].id.second != UINT_E_MAX) {
                         is_split_edge[i] = true;
                         split_edges[i] = std::make_pair(
                             tree.edge_table[edge_index].id.first,
