@@ -409,7 +409,7 @@ struct Connectivity {
                         tree.skip_list.find_representative(our_vertex);
                 });
 
-                // segfault occurs in some runs
+                // segfault occurs in some runs, sometimes passes, segfault even on one thread
                 tree.batch_cut(edges_to_split, edge_table);
             }
 
