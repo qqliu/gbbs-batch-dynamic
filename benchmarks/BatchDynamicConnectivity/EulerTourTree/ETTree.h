@@ -364,7 +364,7 @@ struct ETTree {
            skip_list.batch_split(&filtered);
 
            auto joins = sequence<std::pair<SkipList::SkipListElement*, SkipList::SkipListElement*>>(
-                join_targets.size() / 2,
+                2 * cuts.size(),
                 std::make_pair(nullptr, nullptr));
            parallel_for(0, cuts.size(), [&] (size_t i) {
                     if (!ignored[i]) {
