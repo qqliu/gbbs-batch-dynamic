@@ -31,12 +31,16 @@ struct Connectivity {
     // initialize edgemap for SkipListElement data structures
     template <class KY, class VL, class HH, class W>
     void initialize_data_structures(BatchDynamicEdges<W>& batch_edge_list,
-            gbbs::sparse_table<KY, VL, HH>& edge_table) {
+            gbbs::sparse_table<KY, VL, HH>& edge_table, size_t end = 0) {
         auto all_edges = batch_edge_list.edges;
 
         bool abort = false;
+        auto last = all_edges.size();
 
-        parallel_for(0, all_edges.size(), [&](size_t i){
+        if (end != 0)
+            last = end;
+
+        parallel_for(0, last, [&](size_t i){
             uintE v = all_edges[i].from;
             uintE w = all_edges[i].to;
 
@@ -656,7 +660,12 @@ inline void RunConnectivity(BatchDynamicEdges<W>& batch_edge_list, long batch_si
         size_t offset, size_t n, int copies, size_t m, double pb) {
 
         auto batch = batch_edge_list.edges;
-        auto cutset = Connectivity(n, copies, batch.size(), pb);
+
+        auto total_size = batch.size();
+        if (offset > 0)
+            total_size = offset;
+
+        auto cutset = Connectivity(n, copies, total_size, pb);
 
         KV empty =
             std::make_pair(std::make_pair(UINT_E_MAX, UINT_E_MAX), UINT_E_MAX);
@@ -669,15 +678,13 @@ inline void RunConnectivity(BatchDynamicEdges<W>& batch_edge_list, long batch_si
         };
 
         auto edge_table =
-            gbbs::make_sparse_table<K, V>(2 * batch.size(), empty, hash_pair);
+            gbbs::make_sparse_table<K, V>(2 * total_size, empty, hash_pair);
 
         auto existence_table =
-            gbbs::make_sparse_table<K, bool>(2 * batch.size(), empty, hash_pair);
+            gbbs::make_sparse_table<K, bool>(2 * total_size, empty, hash_pair);
 
-        cutset.initialize_data_structures(batch_edge_list, edge_table);
+        cutset.initialize_data_structures(batch_edge_list, edge_table, offset);
         bool abort = false;
-
-        std::cout << "batch size: " << batch.size() << std::endl;
 
         if (offset != 0) {
             for (size_t i = 0; i < offset; i += 1000000) {

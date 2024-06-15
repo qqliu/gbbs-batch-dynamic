@@ -95,6 +95,10 @@ struct ETTree {
                 std::cout << "There is an error in edge_index_table" << std::endl;
 
             auto uv = &edge_table[index_uv];
+
+            if (uv->id.first == UINT_E_MAX || uv->id.second == UINT_E_MAX)
+                return;
+
             auto vu = uv->twin;
 
             auto u_left = uv->get_left(0);
@@ -265,6 +269,12 @@ struct ETTree {
     template <class KY, class VL, class HH>
     void batch_cut_recurse(sequence<std::pair<uintE, uintE>>& cuts,
         gbbs::sparse_table<KY, VL, HH>& edge_index_table) {
+
+            if (cuts.size() <= 75) {
+                    batch_cut_sequential(cuts, edge_index_table);
+                    return;
+            }
+
             sequence<SkipList::SkipListElement*> join_targets =
                 sequence<SkipList::SkipListElement*>(4 * cuts.size(), nullptr);
             sequence<SkipList::SkipListElement*> edge_elements =
@@ -272,10 +282,6 @@ struct ETTree {
 
             parlay::random rng = parlay::random(time(0));
 
-            if (cuts.size() <= 75) {
-                    batch_cut_sequential(cuts, edge_index_table);
-                    return;
-            }
             sequence<bool> ignored = sequence<bool>(cuts.size(), true);
 
             parallel_for(0, cuts.size(), [&] (size_t i) {
@@ -294,11 +300,13 @@ struct ETTree {
                         std::cout << "This is an error in edge_index_table in batch deletions" << std::endl;
 
                     SkipList::SkipListElement* uv = &edge_table[index_uv];
-                    SkipList::SkipListElement* vu = uv->twin;
+                    if (uv->id.first != UINT_E_MAX && uv->id.second != UINT_E_MAX) {
+                        SkipList::SkipListElement* vu = uv->twin;
 
-                    edge_elements[i] = uv;
-                    uv -> split_mark = true;
-                    vu -> split_mark = true;
+                        edge_elements[i] = uv;
+                        uv -> split_mark = true;
+                        vu -> split_mark = true;
+                    }
                 }
 
                 rng = rng.next();
@@ -308,29 +316,31 @@ struct ETTree {
             parallel_for(0, cuts.size(), [&] (size_t i) {
                     if (!ignored[i]) {
                         SkipList::SkipListElement* uv = edge_elements[i];
-                        SkipList::SkipListElement* vu = uv->twin;
+                        if (uv->id.first != UINT_E_MAX && uv->id.second != UINT_E_MAX) {
+                            SkipList::SkipListElement* vu = uv->twin;
 
-                        SkipList::SkipListElement* left_target = uv->get_left(0);
-                        if (left_target -> split_mark) {
-                            join_targets[4 * i] = nullptr;
-                        } else {
-                            SkipList::SkipListElement* right_target = vu->get_right(0);
-                            while (right_target->split_mark) {
-                                right_target = right_target->twin->get_right(0);
-                            }
-                            join_targets[4 * i] = left_target;
-                            join_targets[4 * i + 1] = right_target;
-                        }
-                        left_target = vu->get_left(0);
-                        if(left_target -> split_mark) {
-                            join_targets[4 * i + 2] = nullptr;
-                        } else {
-                            SkipList::SkipListElement* right_target = uv -> get_right(0);
-                            while (right_target -> split_mark) {
+                            SkipList::SkipListElement* left_target = uv->get_left(0);
+                            if (left_target -> split_mark) {
+                                join_targets[4 * i] = nullptr;
+                            } else {
+                                SkipList::SkipListElement* right_target = vu->get_right(0);
+                                while (right_target->split_mark) {
                                     right_target = right_target->twin->get_right(0);
+                                }
+                                join_targets[4 * i] = left_target;
+                                join_targets[4 * i + 1] = right_target;
                             }
-                            join_targets[4 * i + 2] = left_target;
-                            join_targets[4 * i + 3] = right_target;
+                            left_target = vu->get_left(0);
+                            if(left_target -> split_mark) {
+                                join_targets[4 * i + 2] = nullptr;
+                            } else {
+                                SkipList::SkipListElement* right_target = uv -> get_right(0);
+                                while (right_target -> split_mark) {
+                                    right_target = right_target->twin->get_right(0);
+                                }
+                                join_targets[4 * i + 2] = left_target;
+                                join_targets[4 * i + 3] = right_target;
+                            }
                         }
                     }
             });
@@ -339,21 +349,22 @@ struct ETTree {
             parallel_for(0, cuts.size(), [&] (size_t i) {
                     if (!ignored[i]) {
                         SkipList::SkipListElement* uv = edge_elements[i];
-                        SkipList::SkipListElement* vu = uv->twin;
+                        if (uv->id.first != UINT_E_MAX && uv->id.second != UINT_E_MAX) {
+                            SkipList::SkipListElement* vu = uv->twin;
 
-                        splits[4 * i] = uv;
-                        splits[4 * i + 1] = vu;
+                            splits[4 * i] = uv;
+                            splits[4 * i + 1] = vu;
 
-                        SkipList::SkipListElement* predecessor = uv->get_left(0);
-                        if (predecessor != nullptr) {
-                            splits[4 * i + 2] = predecessor;
+                            SkipList::SkipListElement* predecessor = uv->get_left(0);
+                            if (predecessor != nullptr) {
+                                splits[4 * i + 2] = predecessor;
+                            }
+
+                            predecessor = vu->get_left(0);
+                            if (predecessor != nullptr) {
+                                splits[4 * i + 3] = predecessor;
+                            }
                         }
-
-                        predecessor = vu->get_left(0);
-                        if (predecessor != nullptr) {
-                            splits[4 * i + 3] = predecessor;
-                        }
-
                     }
            });
 
@@ -392,10 +403,13 @@ struct ETTree {
                         }
                     }
             });
+
             sequence<std::pair<SkipList::SkipListElement*, SkipList::SkipListElement*>> filtered_joins =
                 parlay::filter(joins, [&] (const std::pair<SkipList::SkipListElement*,
                             SkipList::SkipListElement*>& e) {
-                    return e.first != nullptr || e.second != nullptr;
+                    if ((e.first != nullptr && e.second == nullptr) || (e.first == nullptr && e.second != nullptr))
+                        std::cout << "ERROR: joining nullptr" << std::endl;
+                    return e.first != nullptr && e.second != nullptr;
             });
 
             skip_list.batch_join(&filtered_joins);
