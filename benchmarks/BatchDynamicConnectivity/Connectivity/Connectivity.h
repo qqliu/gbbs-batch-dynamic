@@ -356,6 +356,8 @@ struct Connectivity {
         sequence<SkipList::SkipListElement*> representative_nodes = sequence<SkipList::SkipListElement*>(0);
         bool abort = false;
 
+        auto total_new_links = 0;
+
         while(non_empty_spanning_tree) {
             if (first) {
                 edges_both_directions =  sequence<std::pair<uintE, uintE>>(2 * deletions.size());
@@ -378,9 +380,13 @@ struct Connectivity {
                             && tree.edge_table[edge_index].id.first != UINT_E_MAX
                             && tree.edge_table[edge_index].id.second != UINT_E_MAX) {
                         is_split_edge[i] = true;
-                        split_edges[i] = std::make_pair(
-                            tree.edge_table[edge_index].id.first,
-                            tree.edge_table[edge_index].id.second);
+
+                        auto min_id = std::min(tree.edge_table[edge_index].id.first,
+                                      tree.edge_table[edge_index].id.second);
+                        auto max_id = std::max(tree.edge_table[edge_index].id.first,
+                                      tree.edge_table[edge_index].id.second);
+
+                        split_edges[i] = std::make_pair(min_id, max_id);
                     }
                 });
 
@@ -388,16 +394,25 @@ struct Connectivity {
                     edges_to_split = parlay::pack(split_edges, is_split_edge);
 
                 auto compare_tup = [&] (const std::pair<uintE, uintE> l, const std::pair<uintE, uintE> r) {
-                    return l.first < r.first;
+                    return l.first < r.first || (l.first == r.first && l.second < r.second);
                 };
                 parlay::sort_inplace(parlay::make_slice(edges_both_directions), compare_tup);
+                parlay::sort_inplace(parlay::make_slice(edges_to_split), compare_tup);
 
                 auto bool_seq = sequence<bool>(edges_both_directions.size() + 1);
+                auto edges_to_split_bool_seq = sequence<bool>(edges_to_split.size());
                 parallel_for(0, edges_both_directions.size() + 1, [&](size_t i) {
                     bool_seq[i] = (i == 0) || (i == edges_both_directions.size()) ||
                        (edges_both_directions[i-1].first != edges_both_directions[i].first);
                 });
+
+                parallel_for(0, edges_to_split.size(), [&](size_t i){
+                    edges_to_split_bool_seq[i] = (i == 0) || (edges_to_split[i-1].first != edges_to_split[i].first)
+                        || (edges_to_split[i-1].second != edges_to_split[i].second);
+                });
+
                 starts = parlay::pack_index(bool_seq);
+                auto non_duplicate_splits = parlay::pack(edges_to_split, edges_to_split_bool_seq);
 
                 representative_nodes =
                     sequence<SkipList::SkipListElement*>(starts.size()-1);
@@ -413,8 +428,7 @@ struct Connectivity {
                         tree.skip_list.find_representative(our_vertex);
                 });
 
-                // segfault occurs in some runs, sometimes passes, segfault even on one thread
-                tree.batch_cut(edges_to_split, edge_table);
+                tree.batch_cut(non_duplicate_splits, edge_table);
             }
 
             first = false;
@@ -616,8 +630,9 @@ struct Connectivity {
             auto new_graph = sym_graph_from_edges(remapped_edges, remapped_verts.size());
 
             auto spanning_forest = workefficient_sf::SpanningForest(new_graph);
-            if(spanning_forest.size() == 0)
+            if(spanning_forest.size() == 0) {
                 non_empty_spanning_tree = false;
+            }
             else {
                 auto original_edges = sequence<std::pair<uintE, uintE>>(spanning_forest.size(), std::make_pair(UINT_E_MAX, UINT_E_MAX));
                 auto is_valid_edge = sequence<bool>(spanning_forest.size(), false);
@@ -643,11 +658,17 @@ struct Connectivity {
                 });
 
                 auto to_link_edges = parlay::pack(original_edges, is_valid_edge);
+                total_new_links += to_link_edges.size();
 
-                // Original edges are guaranteed to be unique since representative edges are unique
-                tree.batch_link(to_link_edges, edge_table);
+                if (to_link_edges.size() > 0) {
+                    // Original edges are guaranteed to be unique since representative edges are unique
+                    tree.batch_link(to_link_edges, edge_table);
+                } else {
+                    non_empty_spanning_tree = false;
+                }
             }
          }
+        std::cout << "New edges linked after deletions: " << total_new_links << std::endl;
     }
 };
 
