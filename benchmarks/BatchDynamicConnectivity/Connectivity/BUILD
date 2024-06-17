@@ -9,7 +9,10 @@ cc_library(
   "//benchmarks/BatchDynamicConnectivity/EulerTourTree:ETTree_main",
   "//benchmarks/SpanningForest/SDB14:SpanningForest_main",
   "//gbbs:graph_io",
-  "//gbbs:dynamic_graph_io"
+  "//gbbs:dynamic_graph_io",
+  "//benchmarks/Connectivity:common",
+  "//gbbs:contract",
+  "//benchmarks/Connectivity/WorkEfficientSDB14:Connectivity_main"
   ]
 )
 

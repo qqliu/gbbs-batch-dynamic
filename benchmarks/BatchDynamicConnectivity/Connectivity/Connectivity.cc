@@ -38,6 +38,7 @@ double Connectivity_runner(Graph& G, commandLine P) {
   using W = typename Graph::weight_type;
   const std::string kInputFlag{"-i"};
   const char* const input_file{P.getOptionValue(kInputFlag)};
+  bool compare_exact = P.getOption("-stats");
 
   std::cout << "reading edge list" << std::endl;
   bool use_dynamic = (input_file && input_file[0]);
@@ -58,7 +59,7 @@ double Connectivity_runner(Graph& G, commandLine P) {
 
   std::cout << "finished reading edge list" << std::endl;
   //RunConnectivity(batch_edge_list, 5, false, 0, 1140148, 50, 2787967, 1.5);
-  RunConnectivity(batch_edge_list, 100000, false, offset, 7115, 50, 15, 1.5);
+  RunConnectivity(batch_edge_list, 100000, compare_exact, offset, 7115, 50, 15, 1.5);
 
   std::cout << "### Running Time: " << tt << std::endl;
   return tt;

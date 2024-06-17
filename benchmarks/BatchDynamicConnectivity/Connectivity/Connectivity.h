@@ -8,6 +8,7 @@
 #include "benchmarks/KCore/JulienneDBS17/KCore.h"
 #include "benchmarks/BatchDynamicConnectivity/EulerTourTree/ETTree.h"
 #include "benchmarks/SpanningForest/SDB14/SpanningForest.h"
+#include "benchmarks/Connectivity/WorkEfficientSDB14/Connectivity.h"
 
 namespace gbbs {
 using K = std::pair<uintE, uintE>;
@@ -793,6 +794,13 @@ inline void RunConnectivity(BatchDynamicEdges<W>& batch_edge_list, long batch_si
             });
 
             cutset.batch_deletion(batch_deletions, edge_table, existence_table);
+
+            if (compare_exact) {
+                auto graph = dynamic_edge_list_to_symmetric_graph(batch_edge_list, std::min(batch.size(),
+                        i + batch_size));
+
+                auto true_cc = workefficient_cc::CC(graph, 0.2, false, false);
+            }
             auto runtime = t.stop();
             std::cout << "runtime: " << runtime << std::endl;
 
