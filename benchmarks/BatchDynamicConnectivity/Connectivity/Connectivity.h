@@ -800,17 +800,37 @@ inline void RunConnectivity(BatchDynamicEdges<W>& batch_edge_list, long batch_si
                         i + batch_size));
 
                 auto true_cc = workefficient_cc::CC(graph, 0.2, false, false);
+                sequence<int> correct = sequence<int>(graph.n * graph.n, 0);
+                sequence<int> total_queried = sequence<int>(graph.n * graph.n, 0);
+
+                for (size_t i = 0; i < graph.n; i++) {
+                        for (size_t j = 0; j < graph.n; j++) {
+                            if ((i != j) && (((true_cc[i] == true_cc[j]) && cutset.is_connected(i, j)) ||
+                                        (true_cc[i] != true_cc[j] && !cutset.is_connected(i, j))))
+                                correct[i * graph.n + j] = 1;
+
+                            if (i != j)
+                                total_queried[i * graph.n + j] = 1;
+                        }
+                }
+
+                std::cout << "fraction correct: "
+                    << (parlay::scan_inplace(correct) * 1.0)/(parlay::scan_inplace(total_queried))
+                    << std::endl;
             }
             auto runtime = t.stop();
             std::cout << "runtime: " << runtime << std::endl;
 
-            sequence<int> correct = sequence<int>(batch_insertions.size(), false);
-            parallel_for(0, batch_insertions.size(), [&](size_t i) {
-                correct[i] = cutset.is_connected(batch_insertions[i].first, batch_insertions[i].second);
-            });
-            auto num_correct = parlay::scan_inplace(correct);
+            /*if (compare_exact) {
+                sequence<int> correct = sequence<int>(batch_insertions.size(), false);
+                parallel_for(0, batch_insertions.size(), [&](size_t i) {
+                    correct[i] = cutset.is_connected(batch_insertions[i].first, batch_insertions[i].second);
+                });
+                auto num_correct = parlay::scan_inplace(correct);
 
-            std::cout << "fraction correct: " << (num_correct * 1.0)/batch_insertions.size() << std::endl;
+                std::cout << "insertions fraction correct: " <<
+                    (num_correct * 1.0)/batch_insertions.size() << std::endl;
+            }*/
     }
 }
 
