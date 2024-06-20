@@ -18,6 +18,9 @@ using KV = std::pair<K, V>;
 using V_pairs = std::pair<uintE, uintE>;
 using KV_pairs = std::pair<K, V_pairs>;
 
+using V_cutset = std::pair<sequence<bool>, sequence<bool>>;
+using KV_cutset = std::pair<K, V_cutset>;
+
 struct Connectivity {
     size_t n;
     ETTree tree;
@@ -30,9 +33,11 @@ struct Connectivity {
     }
 
     // initialize edgemap for SkipListElement data structures
-    template <class KY, class VL, class HH, class W>
+    template <class KY, class VL, class HH, class W, class VLcutset>
     void initialize_data_structures(BatchDynamicEdges<W>& batch_edge_list,
-            gbbs::sparse_table<KY, VL, HH>& edge_table, size_t end = 0) {
+            gbbs::sparse_table<KY, VL, HH>& edge_table,
+            gbbs::sparse_table<KY, VLcutset, HH>& edge_cutset_table,
+            size_t end = 0) {
         auto all_edges = batch_edge_list.edges;
 
         bool abort = false;
@@ -45,16 +50,23 @@ struct Connectivity {
             uintE v = all_edges[i].from;
             uintE w = all_edges[i].to;
 
+            uintE minv = std::min(v, w);
+            uintE maxv = std::max(v, w);
+
             if (all_edges[i].insert) {
                 edge_table.insert_check(std::make_pair(std::make_pair(v, w), 2 * i), &abort);
                 edge_table.insert_check(std::make_pair(std::make_pair(w, v), 2 * i + 1), &abort);
+
+                edge_cutset_table.insert_check(std::make_pair(std::make_pair(minv, maxv),
+                            std::make_pair(sequence<bool>(2500, false), sequence<bool>(2500, false))), &abort);
             }
         });
     }
 
     template <class Seq, class KY, class VL, class HH>
     void batch_insertion(const Seq& insertions, gbbs::sparse_table<KY, VL, HH>& edge_table,
-            gbbs::sparse_table<KY, bool, HH>& existence_table) {
+            gbbs::sparse_table<KY, bool, HH>& existence_table,
+            gbbs::sparse_table<KY, V_cutset, HH>& edge_cutset_table) {
 
         auto non_empty_spanning_tree = true;
         auto first = true;
@@ -96,7 +108,7 @@ struct Connectivity {
                 parallel_for(0, starts.size() - 1, [&](size_t i) {
                     // update j's cutset data structure; need to be sequential because accessing same arrays
                     for (size_t j = starts[i]; j < starts[i+1]; j++) {
-                        tree.add_edge_to_cutsets(edges_both_directions[j]);
+                        tree.add_edge_to_cutsets(edges_both_directions[j], edge_cutset_table, true);
                     }
 
                     SkipList::SkipListElement* our_vertex = &tree.vertices[edges_both_directions[starts[i]].first];
@@ -347,9 +359,10 @@ struct Connectivity {
                 == tree.skip_list.find_representative(vvert);
     }
 
-    template <class Seq, class KY, class VL, class HH>
+    template <class Seq, class KY, class VL, class HH, class V_cutset>
     void batch_deletion(const Seq& deletions, gbbs::sparse_table<KY, VL, HH>& edge_table,
-            gbbs::sparse_table<KY, bool, HH>& existence_table) {
+            gbbs::sparse_table<KY, bool, HH>& existence_table,
+            gbbs::sparse_table<KY, V_cutset, HH>& edge_cutset_table) {
         auto non_empty_spanning_tree = true;
         auto first = true;
         sequence<std::pair<uintE, uintE>> edges_both_directions = sequence<std::pair<uintE, uintE>>(0);
@@ -421,7 +434,7 @@ struct Connectivity {
                 parallel_for(0, starts.size() - 1, [&](size_t i) {
                     // update j's cutset data structure; need to be sequential because accessing same arrays
                     for (size_t j = starts[i]; j < starts[i+1]; j++) {
-                        tree.add_edge_to_cutsets(edges_both_directions[j]);
+                        tree.add_edge_to_cutsets(edges_both_directions[j], edge_cutset_table, false);
                     }
 
                     SkipList::SkipListElement* our_vertex = &tree.vertices[edges_both_directions[starts[i]].first];
@@ -692,6 +705,10 @@ inline void RunConnectivity(BatchDynamicEdges<W>& batch_edge_list, long batch_si
         KV empty =
             std::make_pair(std::make_pair(UINT_E_MAX, UINT_E_MAX), UINT_E_MAX);
 
+        KV_cutset empty_cutset =
+            std::make_pair(std::make_pair(UINT_E_MAX, UINT_E_MAX),
+                    std::make_pair(sequence<bool>(2500, false), sequence<bool>(2500, false)));
+
         auto hash_pair = [](const std::pair<uintE, uintE>& t) {
             size_t l = std::min(std::get<0>(t), std::get<1>(t));
             size_t r = std::max(std::get<0>(t), std::get<1>(t));
@@ -705,7 +722,10 @@ inline void RunConnectivity(BatchDynamicEdges<W>& batch_edge_list, long batch_si
         auto existence_table =
             gbbs::make_sparse_table<K, bool>(2 * total_size, empty, hash_pair);
 
-        cutset.initialize_data_structures(batch_edge_list, edge_table, offset);
+        auto edge_cutset_table = gbbs::make_sparse_table<K, V_cutset>(2 * total_size, empty_cutset,
+                hash_pair);
+
+        cutset.initialize_data_structures(batch_edge_list, edge_table, edge_cutset_table, offset);
         bool abort = false;
 
         if (offset != 0) {
@@ -732,7 +752,7 @@ inline void RunConnectivity(BatchDynamicEdges<W>& batch_edge_list, long batch_si
                     return std::make_pair(vert1, vert2);
                 });
 
-                cutset.batch_insertion(batch_insertions, edge_table, existence_table);
+                cutset.batch_insertion(batch_insertions, edge_table, existence_table, edge_cutset_table);
 
                 auto batch_deletions = parlay::delayed_seq<std::pair<uintE, uintE>>(deletions.size(),
                 [&] (size_t i) {
@@ -747,7 +767,7 @@ inline void RunConnectivity(BatchDynamicEdges<W>& batch_edge_list, long batch_si
                     return std::make_pair(vert1, vert2);
                 });
 
-                cutset.batch_deletion(batch_deletions, edge_table, existence_table);
+                cutset.batch_deletion(batch_deletions, edge_table, existence_table, edge_cutset_table);
             }
         }
 
@@ -778,7 +798,7 @@ inline void RunConnectivity(BatchDynamicEdges<W>& batch_edge_list, long batch_si
                 return std::make_pair(vert1, vert2);
             });
 
-            cutset.batch_insertion(batch_insertions, edge_table, existence_table);
+            cutset.batch_insertion(batch_insertions, edge_table, existence_table, edge_cutset_table);
 
             auto batch_deletions = parlay::delayed_seq<std::pair<uintE, uintE>>(deletions.size(),
                 [&] (size_t i) {
@@ -793,7 +813,8 @@ inline void RunConnectivity(BatchDynamicEdges<W>& batch_edge_list, long batch_si
                 return std::make_pair(vert1, vert2);
             });
 
-            cutset.batch_deletion(batch_deletions, edge_table, existence_table);
+
+            cutset.batch_deletion(batch_deletions, edge_table, existence_table, edge_cutset_table);
 
             if (compare_exact) {
                 auto graph = dynamic_edge_list_to_symmetric_graph(batch_edge_list, std::min(batch.size(),

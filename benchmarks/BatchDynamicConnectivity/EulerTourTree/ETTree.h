@@ -433,7 +433,10 @@ struct ETTree {
     }
 
     // Dynamic connectivity specific method
-    void add_edge_to_cutsets(std::pair<uintE, uintE> edge) {
+    template <class KY, class V_cutset, class HH>
+    void add_edge_to_cutsets(std::pair<uintE, uintE> edge,
+        gbbs::sparse_table<KY, V_cutset, HH>& edge_cutset_table,
+        bool is_insertion) {
         auto min_edge = std::min(edge.first, edge.second);
         auto max_edge = std::max(edge.first, edge.second);
 
@@ -448,10 +451,43 @@ struct ETTree {
                     if (base < 1)
                         base = 1;
 
+                    bool abort = false;
                     auto rand_val_u = cutset_rng.rand() % base;
-                    if (rand_val_u <= 0)
-                        u->values[0][ii][ij] = std::make_pair(u->values[0][ii][ij].first ^ min_edge,
+                    if (rand_val_u <= 0) {
+                        auto cutset_values = edge_cutset_table.find(std::make_pair(min_edge, max_edge),
+                            std::make_pair(
+                            sequence<bool>(50, false), sequence<bool>(50, false)));
+                        if (is_insertion) {
+                            u->values[0][ii][ij] = std::make_pair(u->values[0][ii][ij].first ^ min_edge,
                                 u->values[0][ii][ij].second ^ max_edge);
+
+                            if (edge.first == min_edge)
+                                cutset_values.first[50*ii + ij] = true;
+                            else
+                                cutset_values.second[50*ii + ij] = true;
+
+                        } else {
+                            if (edge.first == min_edge) {
+                                    if (cutset_values.first[50*ii + ij] == true) {
+                                        std::cout <<"true value"<<std::endl;
+                                          u->values[0][ii][ij] = std::make_pair(u->values[0][ii][ij].first ^ min_edge,
+                                            u->values[0][ii][ij].second ^ max_edge);
+                                        cutset_values.first[50*ii + ij] = false;
+                                    }
+                            } else {
+                                    if (cutset_values.second[50*ii + ij] == true) {
+                                        std::cout<<"true value"<<std::endl;
+                                          u->values[0][ii][ij] = std::make_pair(u->values[0][ii][ij].first ^ min_edge,
+                                            u->values[0][ii][ij].second ^ max_edge);
+                                        cutset_values.second[50*ii + ij] = false;
+                                    }
+
+                            }
+                        }
+
+                        edge_cutset_table.insert_check(std::make_pair(std::make_pair(min_edge, max_edge),
+                            cutset_values), &abort);
+                    }
 
                     cutset_rng = cutset_rng.next();
             });
@@ -549,9 +585,9 @@ void RunETTree(double pb, int copies, size_t m) {
         std::cout << "v: 2, parent: 2: " << c[0][0].first << ", " << c[0][0].second << std::endl;
         std::cout << "v: 5, parent: 5: " << d[0][0].first << ", " << d[0][0].second << std::endl;
 
-        tree.add_edge_to_cutsets(std::make_pair(1, 6));
-        tree.add_edge_to_cutsets(std::make_pair(6, 1));
-        tree.add_edge_to_cutsets(std::make_pair(1, 9));
+        //tree.add_edge_to_cutsets(std::make_pair(1, 6));
+        //tree.add_edge_to_cutsets(std::make_pair(6, 1));
+        //tree.add_edge_to_cutsets(std::make_pair(1, 9));
 
         std::cout << "v: 1, value: " << tree.vertices[1].values[0][0][0].first << ", "
             << tree.vertices[1].values[0][0][0].second
