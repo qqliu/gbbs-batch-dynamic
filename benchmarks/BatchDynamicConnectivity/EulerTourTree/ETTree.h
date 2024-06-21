@@ -433,14 +433,19 @@ struct ETTree {
     }
 
     // Dynamic connectivity specific method
-    template <class KY, class V_cutset, class HH>
+    template <class KY, class VL, class HH>
     void add_edge_to_cutsets(std::pair<uintE, uintE> edge,
-        gbbs::sparse_table<KY, V_cutset, HH>& edge_cutset_table,
+        sequence<std::pair<sequence<bool>, sequence<bool>>>& edge_cutset_table,
+        gbbs::sparse_table<KY, VL, HH>& edge_table,
         bool is_insertion) {
         auto min_edge = std::min(edge.first, edge.second);
         auto max_edge = std::max(edge.first, edge.second);
 
         auto u = &vertices[edge.first];
+        auto edge_cutset_index = edge_table.find(std::make_pair(min_edge, max_edge), UINT_E_MAX);
+
+        if (edge_cutset_index == UINT_E_MAX)
+            std::cout << "ERROR: edge cutset index error" << std::endl;
 
         parallel_for(0, u->values[0].size(), [&](size_t ii) {
             parallel_for(0, u->values[0][ii].size(), [&](size_t ij) {
@@ -451,42 +456,35 @@ struct ETTree {
                     if (base < 1)
                         base = 1;
 
-                    bool abort = false;
                     auto rand_val_u = cutset_rng.rand() % base;
                     if (rand_val_u <= 0) {
-                        auto cutset_values = edge_cutset_table.find(std::make_pair(min_edge, max_edge),
-                            std::make_pair(
-                            sequence<bool>(50, false), sequence<bool>(50, false)));
                         if (is_insertion) {
                             u->values[0][ii][ij] = std::make_pair(u->values[0][ii][ij].first ^ min_edge,
                                 u->values[0][ii][ij].second ^ max_edge);
 
                             if (edge.first == min_edge)
-                                cutset_values.first[50*ii + ij] = true;
+                                edge_cutset_table[edge_cutset_index].first[50*ii + ij] = true;
                             else
-                                cutset_values.second[50*ii + ij] = true;
+                                edge_cutset_table[edge_cutset_index].second[50*ii + ij] = true;
 
                         } else {
                             if (edge.first == min_edge) {
-                                    if (cutset_values.first[50*ii + ij] == true) {
-                                        std::cout <<"true value"<<std::endl;
+                                    if (edge_cutset_table[edge_cutset_index].first[50*ii + ij] == true) {
+                                        //std::cout <<"true value"<<std::endl;
                                           u->values[0][ii][ij] = std::make_pair(u->values[0][ii][ij].first ^ min_edge,
                                             u->values[0][ii][ij].second ^ max_edge);
-                                        cutset_values.first[50*ii + ij] = false;
+                                        edge_cutset_table[edge_cutset_index].first[50*ii + ij] = false;
                                     }
                             } else {
-                                    if (cutset_values.second[50*ii + ij] == true) {
-                                        std::cout<<"true value"<<std::endl;
+                                    if (edge_cutset_table[edge_cutset_index].second[50*ii + ij] == true) {
+                                        //std::cout<<"true value"<<std::endl;
                                           u->values[0][ii][ij] = std::make_pair(u->values[0][ii][ij].first ^ min_edge,
                                             u->values[0][ii][ij].second ^ max_edge);
-                                        cutset_values.second[50*ii + ij] = false;
+                                        edge_cutset_table[edge_cutset_index].second[50*ii + ij] = false;
                                     }
 
                             }
                         }
-
-                        edge_cutset_table.insert_check(std::make_pair(std::make_pair(min_edge, max_edge),
-                            cutset_values), &abort);
                     }
 
                     cutset_rng = cutset_rng.next();

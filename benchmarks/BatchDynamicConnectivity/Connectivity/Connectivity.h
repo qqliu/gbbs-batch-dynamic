@@ -33,10 +33,10 @@ struct Connectivity {
     }
 
     // initialize edgemap for SkipListElement data structures
-    template <class KY, class VL, class HH, class W, class VLcutset>
+    template <class KY, class VL, class HH, class W>
     void initialize_data_structures(BatchDynamicEdges<W>& batch_edge_list,
             gbbs::sparse_table<KY, VL, HH>& edge_table,
-            gbbs::sparse_table<KY, VLcutset, HH>& edge_cutset_table,
+            sequence<std::pair<sequence<bool>, sequence<bool>>>& edge_cutset_table,
             size_t end = 0) {
         auto all_edges = batch_edge_list.edges;
 
@@ -50,15 +50,9 @@ struct Connectivity {
             uintE v = all_edges[i].from;
             uintE w = all_edges[i].to;
 
-            uintE minv = std::min(v, w);
-            uintE maxv = std::max(v, w);
-
             if (all_edges[i].insert) {
                 edge_table.insert_check(std::make_pair(std::make_pair(v, w), 2 * i), &abort);
                 edge_table.insert_check(std::make_pair(std::make_pair(w, v), 2 * i + 1), &abort);
-
-                edge_cutset_table.insert_check(std::make_pair(std::make_pair(minv, maxv),
-                            std::make_pair(sequence<bool>(2500, false), sequence<bool>(2500, false))), &abort);
             }
         });
     }
@@ -66,7 +60,7 @@ struct Connectivity {
     template <class Seq, class KY, class VL, class HH>
     void batch_insertion(const Seq& insertions, gbbs::sparse_table<KY, VL, HH>& edge_table,
             gbbs::sparse_table<KY, bool, HH>& existence_table,
-            gbbs::sparse_table<KY, V_cutset, HH>& edge_cutset_table) {
+            sequence<std::pair<sequence<bool>, sequence<bool>>>& edge_cutset_table) {
 
         auto non_empty_spanning_tree = true;
         auto first = true;
@@ -108,7 +102,7 @@ struct Connectivity {
                 parallel_for(0, starts.size() - 1, [&](size_t i) {
                     // update j's cutset data structure; need to be sequential because accessing same arrays
                     for (size_t j = starts[i]; j < starts[i+1]; j++) {
-                        tree.add_edge_to_cutsets(edges_both_directions[j], edge_cutset_table, true);
+                        tree.add_edge_to_cutsets(edges_both_directions[j], edge_cutset_table, edge_table, true);
                     }
 
                     SkipList::SkipListElement* our_vertex = &tree.vertices[edges_both_directions[starts[i]].first];
@@ -359,10 +353,10 @@ struct Connectivity {
                 == tree.skip_list.find_representative(vvert);
     }
 
-    template <class Seq, class KY, class VL, class HH, class V_cutset>
+    template <class Seq, class KY, class VL, class HH>
     void batch_deletion(const Seq& deletions, gbbs::sparse_table<KY, VL, HH>& edge_table,
             gbbs::sparse_table<KY, bool, HH>& existence_table,
-            gbbs::sparse_table<KY, V_cutset, HH>& edge_cutset_table) {
+            sequence<std::pair<sequence<bool>, sequence<bool>>>& edge_cutset_table) {
         auto non_empty_spanning_tree = true;
         auto first = true;
         sequence<std::pair<uintE, uintE>> edges_both_directions = sequence<std::pair<uintE, uintE>>(0);
@@ -434,7 +428,7 @@ struct Connectivity {
                 parallel_for(0, starts.size() - 1, [&](size_t i) {
                     // update j's cutset data structure; need to be sequential because accessing same arrays
                     for (size_t j = starts[i]; j < starts[i+1]; j++) {
-                        tree.add_edge_to_cutsets(edges_both_directions[j], edge_cutset_table, false);
+                        tree.add_edge_to_cutsets(edges_both_directions[j], edge_cutset_table, edge_table, false);
                     }
 
                     SkipList::SkipListElement* our_vertex = &tree.vertices[edges_both_directions[starts[i]].first];
@@ -722,8 +716,11 @@ inline void RunConnectivity(BatchDynamicEdges<W>& batch_edge_list, long batch_si
         auto existence_table =
             gbbs::make_sparse_table<K, bool>(2 * total_size, empty, hash_pair);
 
-        auto edge_cutset_table = gbbs::make_sparse_table<K, V_cutset>(2 * total_size, empty_cutset,
-                hash_pair);
+        std::cout << "initializing edge cutset table" << std::endl;
+        auto edge_cutset_table =
+            sequence<std::pair<sequence<bool>, sequence<bool>>>(2 * total_size,
+                    std::make_pair(sequence<bool>(2500, false), sequence<bool>(2500, false)));
+        std::cout << "finished initializing edge cutset table" << std::endl;
 
         cutset.initialize_data_structures(batch_edge_list, edge_table, edge_cutset_table, offset);
         bool abort = false;
