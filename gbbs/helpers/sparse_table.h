@@ -168,7 +168,10 @@ class sparse_table {
         }
       }
       if (std::get<0>(table[h]) == k) {
-        return false;
+        if (gbbs::atomic_compare_and_swap(&std::get<0>(table[h]), k, k)) {
+            std::get<1>(table[h]) = std::get<1>(kv);
+            return true;
+        }
       }
       h = incrementIndex(h);
       n_probes++;

@@ -364,6 +364,12 @@ struct Connectivity {
         sequence<SkipList::SkipListElement*> representative_nodes = sequence<SkipList::SkipListElement*>(0);
         bool abort = false;
 
+        parallel_for(0, deletions.size(), [&](size_t i){
+            auto [u, v] = deletions[i];
+            existence_table.insert_check(std::make_pair(std::make_pair(u, v), false), &abort);
+            existence_table.insert_check(std::make_pair(std::make_pair(v, u), false), &abort);
+        });
+
         auto total_new_links = 0;
 
         while(non_empty_spanning_tree) {
@@ -383,6 +389,10 @@ struct Connectivity {
 
                     if (edge_index == UINT_E_MAX)
                         std::cout << "ERROR: edge table doesn't return correct index" << std::endl;
+
+                    auto edge_exists = existence_table.find(std::make_pair(u, v), false);
+                    if (edge_exists)
+                        std::cout << "existence table error" << std::endl;
 
                     if (edge_index != UINT_E_MAX && tree.edge_table[edge_index].twin != nullptr
                             && tree.edge_table[edge_index].id.first != UINT_E_MAX
@@ -824,8 +834,12 @@ inline void RunConnectivity(BatchDynamicEdges<W>& batch_edge_list, long batch_si
                 for (size_t i = 0; i < graph.n; i++) {
                         for (size_t j = 0; j < graph.n; j++) {
                             if ((i != j) && (((true_cc[i] == true_cc[j]) && cutset.is_connected(i, j)) ||
-                                        (true_cc[i] != true_cc[j] && !cutset.is_connected(i, j))))
+                                        (true_cc[i] != true_cc[j] && !cutset.is_connected(i, j)))) {
                                 correct[i * graph.n + j] = 1;
+                            }
+
+                            if (true_cc[i] != true_cc[j] && cutset.is_connected(i, j))
+                                    std::cout << "error in implementation" << std::endl;
 
                             if (i != j)
                                 total_queried[i * graph.n + j] = 1;
