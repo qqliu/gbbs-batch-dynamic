@@ -696,7 +696,7 @@ void RunConnectivityTest() {
 
 template <class W>
 inline void RunConnectivity(BatchDynamicEdges<W>& batch_edge_list, long batch_size, bool compare_exact,
-        size_t offset, size_t n, int copies, size_t m, double pb) {
+        size_t offset, size_t n, int copies, double pb) {
 
         auto batch = batch_edge_list.edges;
 
@@ -711,7 +711,7 @@ inline void RunConnectivity(BatchDynamicEdges<W>& batch_edge_list, long batch_si
 
         KV_cutset empty_cutset =
             std::make_pair(std::make_pair(UINT_E_MAX, UINT_E_MAX),
-                    std::make_pair(sequence<bool>(2500, false), sequence<bool>(2500, false)));
+                    std::make_pair(sequence<bool>(400, false), sequence<bool>(400, false)));
 
         auto hash_pair = [](const std::pair<uintE, uintE>& t) {
             size_t l = std::min(std::get<0>(t), std::get<1>(t));
